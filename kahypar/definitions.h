@@ -40,6 +40,7 @@ using HypernodeWeight = uint32_t;
 using HyperedgeWeight = int32_t;
 using PartitionID = int32_t;
 using Gain = HyperedgeWeight;
+using FineGain = double;
 
 using Hypergraph = kahypar::ds::GenericHypergraph<HypernodeID,
                                                   HyperedgeID, HypernodeWeight,

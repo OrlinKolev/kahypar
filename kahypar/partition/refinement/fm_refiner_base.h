@@ -38,7 +38,7 @@ struct RollbackInfo {
   PartitionID to_part;
 };
 
-template <typename RollbackElement = Mandatory>
+template <typename RollbackElement = Mandatory, typename GainType=Gain>
 class FMRefinerBase {
  public:
   ~FMRefinerBase() = default;
@@ -51,7 +51,7 @@ class FMRefinerBase {
 
  protected:
   static constexpr HypernodeID kInvalidHN = std::numeric_limits<HypernodeID>::max();
-  static constexpr Gain kInvalidGain = std::numeric_limits<Gain>::min();
+  static constexpr GainType kInvalidGain = std::numeric_limits<GainType>::lowest();
   static constexpr HyperedgeWeight kInvalidDecrease = std::numeric_limits<PartitionID>::min();
 
   enum HEState {
@@ -60,16 +60,17 @@ class FMRefinerBase {
   };
 
 #ifdef USE_BUCKET_QUEUE
-  using KWayRefinementPQ = ds::KWayPriorityQueue<HypernodeID, Gain,
-                                                 std::numeric_limits<Gain>,
+#warning Bucket queue not tested with non-integral gain type (may need to replace numeric_limits::min with ::lowest)
+  using KWayRefinementPQ = ds::KWayPriorityQueue<HypernodeID, GainType,
+                                                 std::numeric_limits<GainType>,
                                                  false,
                                                  ds::EnhancedBucketQueue<HypernodeID,
-                                                                         Gain,
-                                                                         std::numeric_limits<Gain>
+                                                                         GainType,
+                                                                         std::numeric_limits<GainType>
                                                                          > >;
 #else
-  using KWayRefinementPQ = ds::KWayPriorityQueue<HypernodeID, Gain,
-                                                 std::numeric_limits<Gain> >;
+  using KWayRefinementPQ = ds::KWayPriorityQueue<HypernodeID, GainType,
+                                                 std::numeric_limits<GainType> >;
 #endif
 
 
