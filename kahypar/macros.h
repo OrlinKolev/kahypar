@@ -49,8 +49,8 @@
 #define DBG(dbg, X)    DBGX(dbg, __FUNCTION__ << "(): " << X << std::endl)  // NOLINT
 #define DBGVAR(dbg, X) DBGX(dbg, __FUNCTION__ << "(): " << #X << "=" << X << std::endl)  // NOLINT
 
-#define LOG(X) DBG(true, X)  // NOLINT
-#define LOGVAR(X) DBGVAR(true, X)  // NOLINT
+#define LOG(X)
+#define LOGVAR(X)
 
 #define V(X) " " << #X << "=" << X << " "
 
