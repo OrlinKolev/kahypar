@@ -27,6 +27,7 @@
 #include "kahypar/partition/coarsening/i_coarsener.h"
 #include "kahypar/partition/initial_partitioning/i_initial_partitioner.h"
 #include "kahypar/partition/refinement/2way_fm_refiner.h"
+#include "kahypar/partition/refinement/2way_netstatus_refiner.h"
 #include "kahypar/partition/refinement/i_refiner.h"
 #include "kahypar/partition/refinement/kway_fm_cut_refiner.h"
 #include "kahypar/partition/refinement/kway_fm_km1_refiner.h"
@@ -47,6 +48,11 @@ using InitialPartitioningFactory = meta::Factory<InitialPartitionerAlgorithm,
                                                  IInitialPartitioner* (*)(Hypergraph&, Configuration&)>;
 
 using TwoWayFMFactoryDispatcher = meta::StaticMultiDispatchFactory<TwoWayFMRefiner,
+                                                                   IRefiner,
+                                                                   meta::Typelist<StoppingPolicyClasses,
+                                                                                  RebalancingPolicyClasses> >;
+
+using TwoWayNetstatusFactoryDispatcher = meta::StaticMultiDispatchFactory<TwoWayNetstatusRefiner,
                                                                    IRefiner,
                                                                    meta::Typelist<StoppingPolicyClasses,
                                                                                   RebalancingPolicyClasses> >;

@@ -88,12 +88,13 @@ class InitialPartitionerBase {
   void performFMRefinement() {
     if (_config.initial_partitioning.refinement) {
       std::unique_ptr<IRefiner> refiner;
-      if (_config.local_search.algorithm == RefinementAlgorithm::twoway_fm &&
+      if ((_config.local_search.algorithm == RefinementAlgorithm::twoway_fm ||
+           _config.local_search.algorithm == RefinementAlgorithm::twoway_netstatus) && 
           _config.initial_partitioning.k > 2) {
         refiner = (RefinerFactory::getInstance().createObject(
                      RefinementAlgorithm::kway_fm,
                      _hg, _config));
-        LOG("WARNING: Trying to use twoway_fm for k > 2! Refiner is set to kway_fm.");
+        LOG("WARNING: Trying to use a two-way refiner for k > 2! Refiner is set to kway_fm.");
       } else {
         refiner = (RefinerFactory::getInstance().createObject(
                      _config.local_search.algorithm,

@@ -175,6 +175,12 @@ REGISTER_DISPATCHED_REFINER(RefinementAlgorithm::twoway_fm,
                               config.local_search.fm.stopping_rule),
                             meta::PolicyRegistry<GlobalRebalancingMode>::getInstance().getPolicy(
                               config.local_search.fm.global_rebalancing));
+REGISTER_DISPATCHED_REFINER(RefinementAlgorithm::twoway_netstatus,
+                            TwoWayNetstatusFactoryDispatcher,
+                            meta::PolicyRegistry<RefinementStoppingRule>::getInstance().getPolicy(
+                              config.local_search.fm.stopping_rule),
+                            meta::PolicyRegistry<GlobalRebalancingMode>::getInstance().getPolicy(
+                              config.local_search.fm.global_rebalancing));
 REGISTER_DISPATCHED_REFINER(RefinementAlgorithm::kway_fm,
                             KWayFMFactoryDispatcher,
                             meta::PolicyRegistry<RefinementStoppingRule>::getInstance().getPolicy(
