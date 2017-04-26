@@ -181,22 +181,8 @@ class TwoWayNetstatusRefiner final : public IRefiner,
     _he_fully_active.reset();
     _locked_hes.resetUsedEntries();
 
-    // Will always be the case in the first FM pass, since the just uncontracted HN
-    // was not seen before.
-    ASSERT(changes.representative.size() == 1, V(changes.representative.size()));
-    ASSERT(changes.contraction_partner.size() == 1, V(changes.contraction_partner.size()));
-    if (!_gain_cache.isCached(refinement_nodes[1]) && _gain_cache.isCached(refinement_nodes[0])) {
-      // In further FM passes, changes will be set to 0 by the caller.
-      _gain_cache.setValue(refinement_nodes[1], _gain_cache.value(refinement_nodes[0])
-                           + changes.contraction_partner[0]);
-      _gain_cache.updateValue(refinement_nodes[0], changes.representative[0]);
-      if (UseGlobalRebalancing()) {
-        _rebalance_pqs[1 - _hg.partID(refinement_nodes[0])].updateKeyBy(refinement_nodes[0],
-                                                                        changes.representative[0]);
-        _rebalance_pqs[1 - _hg.partID(refinement_nodes[1])].push(refinement_nodes[1],
-                                                                 _gain_cache.value(refinement_nodes[1]));
-      }
-    }
+    _gain_cache.setValue(refinement_nodes[0], computeGain(refinement_nodes[0]));
+    _gain_cache.setValue(refinement_nodes[1], computeGain(refinement_nodes[1]));
 
     Randomize::instance().shuffleVector(refinement_nodes, refinement_nodes.size());
     for (const HypernodeID& hn : refinement_nodes) {
