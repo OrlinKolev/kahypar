@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <array>
 #include <limits>
+#include <map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -62,6 +63,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   using RebalancePQ = ds::BinaryMaxHeap<HypernodeID, FineGain>;
   using HypernodeWeightArray = std::array<HypernodeWeight, 2>;
   using Base = FMRefinerBase<HypernodeID, FineGain>;
+  using TempGainMap = std::unordered_map<HypernodeID, FineGain>;
 
  public:
   TwoWayNetstatusRefiner(Hypergraph& hypergraph, const Configuration& config) :
@@ -85,6 +87,10 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   TwoWayNetstatusRefiner(TwoWayNetstatusRefiner&&) = delete;
   TwoWayNetstatusRefiner& operator= (TwoWayNetstatusRefiner&&) = delete;
 
+  FineGain getLooseHEDelta() const {
+    return 0.01;
+  }
+
   void activate(const HypernodeID hn,
                 const HypernodeWeightArray& max_allowed_part_weights) {
     if (_hg.isBorderNode(hn)) {
@@ -94,7 +100,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
       ASSERT(_gain_cache.value(hn) == computeGain(hn), V(hn)
              << V(_gain_cache.value(hn)) << V(computeGain(hn)));
 
-      _pq.insert(hn, 1 - _hg.partID(hn), _gain_cache.value(hn));
+      _pq.insert(hn, 1 - _hg.partID(hn), _gain_cache.value(hn) + _temp_gains[hn]);
       if (_hg.partWeight(1 - _hg.partID(hn)) < max_allowed_part_weights[1 - _hg.partID(hn)]) {
         _pq.enablePart(1 - _hg.partID(hn));
       }
@@ -162,6 +168,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
     reset();
     _he_fully_active.reset();
     _locked_hes.resetUsedEntries();
+    _temp_gains.clear();
 
     _gain_cache.setValue(refinement_nodes[0], computeGain(refinement_nodes[0]));
     _gain_cache.setValue(refinement_nodes[1], computeGain(refinement_nodes[1]));
@@ -206,11 +213,13 @@ class TwoWayNetstatusRefiner final : public IRefiner,
       ASSERT(!_hg.marked(max_gain_node), V(max_gain_node));
       ASSERT(_hg.isBorderNode(max_gain_node), V(max_gain_node));
 
-      ASSERT(max_gain == computeGain(max_gain_node));
-      ASSERT(max_gain == _gain_cache.value(max_gain_node));
+      ASSERT(ALMOST_EQUALS(max_gain, computeGain(max_gain_node) + _temp_gains[max_gain_node]));
+      ASSERT(ALMOST_EQUALS(max_gain, _gain_cache.value(max_gain_node) + _temp_gains[max_gain_node]));
       ASSERT([&]() {
           _hg.changeNodePart(max_gain_node, from_part, to_part);
-          ASSERT((current_cut - max_gain) == metrics::hyperedgeCut(_hg),
+          ASSERT(ALMOST_EQUALS(
+              (current_cut - (max_gain - _temp_gains[max_gain_node])),
+              metrics::hyperedgeCut(_hg)),
                  "cut=" << current_cut - max_gain << "!=" << metrics::hyperedgeCut(_hg));
           _hg.changeNodePart(max_gain_node, to_part, from_part);
           return true;
@@ -222,8 +231,8 @@ class TwoWayNetstatusRefiner final : public IRefiner,
 
       current_imbalance = metrics::imbalance(_hg, _config);
 
-      current_cut -= max_gain;
-      _stopping_policy.updateStatistics(max_gain);
+      current_cut -= max_gain - _temp_gains[max_gain_node];
+      _stopping_policy.updateStatistics(max_gain - _temp_gains[max_gain_node]);
 
       ASSERT(current_cut == metrics::hyperedgeCut(_hg),
              V(current_cut) << V(metrics::hyperedgeCut(_hg)));
@@ -362,9 +371,9 @@ class TwoWayNetstatusRefiner final : public IRefiner,
               ASSERT(!_hg.active(pin) || _pq.contains(pin, other_part), V(pin));
               if (_pq.contains(pin, other_part)) {
                 ASSERT(!_hg.marked(pin), V(pin));
-                ASSERT(_pq.key(pin, other_part) == computeGain(pin),
-                       V(pin) << V(computeGain(pin)) << V(_pq.key(pin, other_part))
-                       << V(_hg.partID(pin)) << V(other_part));
+                ASSERT(ALMOST_EQUALS(_pq.key(pin, other_part), computeGain(pin) + _temp_gains[pin]),
+                       V(pin) << V(computeGain(pin)) << V(_temp_gains[pin])
+                       << V(_pq.key(pin, other_part)) << V(_hg.partID(pin)) << V(other_part));
               } else if (!_hg.marked(pin)) {
                 ASSERT(true == false, "HN " << pin << " not in PQ, but also not marked!");
               }
@@ -417,6 +426,19 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   // This is used for the state transitions: free -> loose and loose -> locked
   void fullUpdate(const PartitionID from_part,
                   const PartitionID to_part, const HyperedgeID he) {
+    
+    FineGain state_gain = _locked_hes.get(he) == HEState::free
+      ? getLooseHEDelta()
+      : -getLooseHEDelta(); 
+    
+    for (const HypernodeID& pin : _hg.pins(he)) {
+      _temp_gains[pin] += state_gain;
+      const PartitionID target_part = 1 - _hg.partID(pin);
+      if (_pq.contains(pin)) {
+        _pq.updateKeyBy(pin, target_part, state_gain);
+      }
+    }
+
     const HypernodeID pin_count_from_part_after_move = _hg.pinCountInPart(he, from_part);
     const HypernodeID pin_count_to_part_after_move = _hg.pinCountInPart(he, to_part);
 
@@ -628,6 +650,10 @@ class TwoWayNetstatusRefiner final : public IRefiner,
       } (), "GainCache Invalid");
   }
 
+  bool ALMOST_EQUALS(FineGain a, FineGain b) {
+    return std::abs(a-b) < 1e-6;
+  }
+
   using Base::_hg;
   using Base::_config;
   using Base::_pq;
@@ -641,5 +667,6 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   TwoWayFMGainCache<FineGain> _gain_cache;
   ds::FastResetArray<PartitionID> _locked_hes;
   StoppingPolicy _stopping_policy;
+  TempGainMap _temp_gains;
 };
 }                                   // namespace kahypar
