@@ -87,8 +87,10 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   TwoWayNetstatusRefiner(TwoWayNetstatusRefiner&&) = delete;
   TwoWayNetstatusRefiner& operator= (TwoWayNetstatusRefiner&&) = delete;
 
-  FineGain getLooseHEDelta() const {
-    return 0.01;
+  FineGain getLooseHEDelta(HyperedgeID he) {
+    static const Gain MAX = 1000;
+    FineGain size = _hg.pins(he).second - _hg.pins(he).first;
+    return (MAX / size) * (_locked_pins[he] / (size - _locked_pins[he]));
   }
 
   void activate(const HypernodeID hn,
@@ -168,6 +170,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
     reset();
     _he_fully_active.reset();
     _locked_hes.resetUsedEntries();
+    _locked_pins.clear();
     _temp_gains.clear();
 
     _gain_cache.setValue(refinement_nodes[0], computeGain(refinement_nodes[0]));
@@ -231,7 +234,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
 
       current_imbalance = metrics::imbalance(_hg, _config);
 
-      current_cut -= max_gain - _temp_gains[max_gain_node];
+      current_cut -= _gain_cache.value(max_gain_node);
       _stopping_policy.updateStatistics(max_gain - _temp_gains[max_gain_node]);
 
       ASSERT(current_cut == metrics::hyperedgeCut(_hg),
@@ -427,10 +430,14 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   void fullUpdate(const PartitionID from_part,
                   const PartitionID to_part, const HyperedgeID he) {
     
-    FineGain state_gain = _locked_hes.get(he) == HEState::free
-      ? getLooseHEDelta()
-      : -getLooseHEDelta(); 
-    
+    FineGain state_gain = 0;
+    if (_locked_hes.get(he) == HEState::free) {
+      _locked_pins[he] = 1;
+      state_gain += getLooseHEDelta(he);
+    } else {
+      state_gain -= getLooseHEDelta(he);
+    }
+
     for (const HypernodeID& pin : _hg.pins(he)) {
       _temp_gains[pin] += state_gain;
       const PartitionID target_part = 1 - _hg.partID(pin);
@@ -529,6 +536,21 @@ class TwoWayNetstatusRefiner final : public IRefiner,
             bool update_local_search_pq = true>
   void deltaUpdate(const PartitionID from_part,
                    const PartitionID to_part, const HyperedgeID he) {
+
+    if (update_local_search_pq) {
+      FineGain state_gain = -getLooseHEDelta(he);
+      _locked_pins[he]++;
+      state_gain += getLooseHEDelta(he);
+
+      for (const HypernodeID& pin : _hg.pins(he)) {
+        _temp_gains[pin] += state_gain;
+        const PartitionID target_part = 1 - _hg.partID(pin);
+        if (_pq.contains(pin)) {
+          _pq.updateKeyBy(pin, target_part, state_gain);
+        }
+      }
+    }
+
     const HypernodeID pin_count_from_part_after_move = _hg.pinCountInPart(he, from_part);
     const HypernodeID pin_count_to_part_after_move = _hg.pinCountInPart(he, to_part);
 
@@ -668,5 +690,6 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   ds::FastResetArray<PartitionID> _locked_hes;
   StoppingPolicy _stopping_policy;
   TempGainMap _temp_gains;
+  std::unordered_map<HyperedgeID, unsigned int> _locked_pins;
 };
 }                                   // namespace kahypar
