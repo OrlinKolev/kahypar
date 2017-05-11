@@ -60,7 +60,7 @@ template <class StoppingPolicy = Mandatory,
 class TwoWayNetstatusRefiner final : public IRefiner,
                               private FMRefinerBase<HypernodeID, FineGain>{
  private:
-  using RebalancePQ = ds::BinaryMaxHeap<HypernodeID, FineGain>;
+  using RebalancePQ = ds::BinaryMaxHeap<HypernodeID, Gain>;
   using HypernodeWeightArray = std::array<HypernodeWeight, 2>;
   using Base = FMRefinerBase<HypernodeID, FineGain>;
   using TempGainMap = std::unordered_map<HypernodeID, FineGain>;
@@ -315,9 +315,9 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   void updateNeighbours(const HypernodeID moved_hn, const PartitionID from_part,
                         const PartitionID to_part,
                         const HypernodeWeightArray& max_allowed_part_weights) {
-    const FineGain temp = _gain_cache.value(moved_hn);
+    const Gain temp = _gain_cache.value(moved_hn);
     ASSERT(-temp == computeGain(moved_hn), V(moved_hn));
-    const FineGain rb_delta = _gain_cache.delta(moved_hn);
+    const Gain rb_delta = _gain_cache.delta(moved_hn);
     _gain_cache.setNotCached(moved_hn);
     for (const HyperedgeID& he : _hg.incidentEdges(moved_hn)) {
       if (_locked_hes.get(he) != HEState::locked) {
@@ -395,14 +395,14 @@ class TwoWayNetstatusRefiner final : public IRefiner,
             _pq.isEnabled(1) : !_pq.isEnabled(1)), V(1));
   }
 
-  void updateGainCache(const HypernodeID pin, const FineGain gain_delta) KAHYPAR_ATTRIBUTE_ALWAYS_INLINE {
+  void updateGainCache(const HypernodeID pin, const Gain gain_delta) KAHYPAR_ATTRIBUTE_ALWAYS_INLINE {
     // Only _gain_cache[moved_hn] = kNotCached, all other entries are cached.
     // However we set _gain_cache[moved_hn] to the correct value after all neighbors
     // are updated.
     _gain_cache.updateCacheAndDelta(pin, gain_delta);
   }
 
-  void performNonZeroFullUpdate(const HypernodeID pin, const FineGain gain_delta,
+  void performNonZeroFullUpdate(const HypernodeID pin, const Gain gain_delta,
                                 HypernodeID& num_active_pins) KAHYPAR_ATTRIBUTE_ALWAYS_INLINE {
     ASSERT(gain_delta != 0);
     if (!_hg.marked(pin)) {
@@ -487,7 +487,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
           // Before move, there were two pins (moved_node and the current pin) in from_part.
           // After moving moved_node to to_part, the gain of the remaining pin in
           // from_part increases by w(he).
-          FineGain factor = increase_necessary && _hg.partID(pin) == from_part ? 1 : 0;
+          Gain factor = increase_necessary && _hg.partID(pin) == from_part ? 1 : 0;
           // Before move, pin was the only HN in to_part. It thus had a
           // positive gain, because moving it to from_part would have removed
           // the HE from the cut. Now, after the move, pin becomes a 0-gain HN
@@ -623,7 +623,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
 #endif
   }
 
-  void updatePin(const HypernodeID pin, const FineGain gain_delta) KAHYPAR_ATTRIBUTE_ALWAYS_INLINE {
+  void updatePin(const HypernodeID pin, const Gain gain_delta) KAHYPAR_ATTRIBUTE_ALWAYS_INLINE {
     const PartitionID target_part = 1 - _hg.partID(pin);
     ASSERT(_hg.active(pin), V(pin) << V(target_part));
     ASSERT(_pq.contains(pin, target_part), V(pin) << V(target_part));
@@ -643,8 +643,8 @@ class TwoWayNetstatusRefiner final : public IRefiner,
     }
   }
 
-  FineGain computeGain(const HypernodeID hn) const {
-    FineGain gain = 0;
+  Gain computeGain(const HypernodeID hn) const {
+    Gain gain = 0;
     ASSERT(_hg.partID(hn) < 2);
     for (const HyperedgeID& he : _hg.incidentEdges(hn)) {
       ASSERT(_hg.edgeSize(he) > 1, V(he));
@@ -686,7 +686,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   ds::FastResetFlagArray<> _he_fully_active;
   ds::FastResetFlagArray<> _hns_in_activation_vector;  // faster than using a SparseSet in this case
   std::vector<HypernodeID> _non_border_hns_to_remove;
-  TwoWayFMGainCache<FineGain> _gain_cache;
+  TwoWayFMGainCache<Gain> _gain_cache;
   ds::FastResetArray<PartitionID> _locked_hes;
   StoppingPolicy _stopping_policy;
   TempGainMap _temp_gains;
