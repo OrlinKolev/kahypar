@@ -88,7 +88,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   TwoWayNetstatusRefiner& operator= (TwoWayNetstatusRefiner&&) = delete;
 
   FineGain getLooseHEDelta(HyperedgeID he) {
-    static const Gain MAX = 1000;
+    static const Gain MAX = _config.partition.hyperedge_size_threshold;
     FineGain size = _hg.pins(he).second - _hg.pins(he).first;
     return (MAX / size) * (_locked_pins[he] / (size - _locked_pins[he]));
   }
