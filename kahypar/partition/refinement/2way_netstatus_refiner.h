@@ -235,7 +235,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
       current_imbalance = metrics::imbalance(_hg, _config);
 
       current_cut -= _gain_cache.value(max_gain_node);
-      _stopping_policy.updateStatistics(max_gain - _temp_gains[max_gain_node]);
+      _stopping_policy.updateStatistics(_gain_cache.value(max_gain_node));
 
       ASSERT(current_cut == metrics::hyperedgeCut(_hg),
              V(current_cut) << V(metrics::hyperedgeCut(_hg)));
@@ -429,18 +429,22 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   // This is used for the state transitions: free -> loose and loose -> locked
   void fullUpdate(const PartitionID from_part,
                   const PartitionID to_part, const HyperedgeID he) {
-    
+   
     FineGain state_gain = 0;
     if (_locked_hes.get(he) == HEState::free) {
       _locked_pins[he] = 1;
-      state_gain += getLooseHEDelta(he);
-    } else {
-      state_gain -= getLooseHEDelta(he);
     }
+    state_gain += getLooseHEDelta(he);
 
     for (const HypernodeID& pin : _hg.pins(he)) {
-      _temp_gains[pin] += state_gain;
+      // for free -> loose, set positive delta in direction from_part -> to_part
+      // for loose -> locked, undo existing positive delta in direction to_part -> from_part
       const PartitionID target_part = 1 - _hg.partID(pin);
+      if (target_part != to_part) {
+        state_gain *= -1;
+      }
+
+      _temp_gains[pin] += state_gain;
       if (_pq.contains(pin)) {
         _pq.updateKeyBy(pin, target_part, state_gain);
       }
@@ -543,8 +547,12 @@ class TwoWayNetstatusRefiner final : public IRefiner,
       state_gain += getLooseHEDelta(he);
 
       for (const HypernodeID& pin : _hg.pins(he)) {
-        _temp_gains[pin] += state_gain;
         const PartitionID target_part = 1 - _hg.partID(pin);
+        if (target_part != to_part) {
+          state_gain *= -1;
+        }
+
+        _temp_gains[pin] += state_gain;
         if (_pq.contains(pin)) {
           _pq.updateKeyBy(pin, target_part, state_gain);
         }
