@@ -24,7 +24,7 @@ action='run'
 
 # this is used on 'run' and 'commit'
 # set to refiner currently in development
-refiners=''
+refiners='twoway_netstatus'
 
 # this is used on 'eval' and 'commit'
 baseline_refiners='twoway_fm'
