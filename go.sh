@@ -152,4 +152,5 @@ IFS=' '
 done # refiners
 done # ks
 done # seeds
-rm -f data/*.KaHyPar
+
+rm -f "$KAHYPAR_TEST_DATA_DIR/*.KaHyPar"
