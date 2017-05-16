@@ -119,6 +119,7 @@ then
     curr_graphs="$eval_graphs"
     refiners="$refiners $baseline_refiners"
     ini="$eval_ini"
+    action='run'
 else
     curr_seeds="$test_seed"
     curr_ks="$test_k"
