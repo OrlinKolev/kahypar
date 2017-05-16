@@ -24,7 +24,7 @@ action='run'
 
 # this is used on 'run' and 'commit'
 # set to refiner currently in development
-refiners=''
+refiners='2way_netstatus'
 
 # this is used on 'eval' and 'commit'
 baseline_refiners='twoway_fm'
@@ -123,7 +123,6 @@ else
     curr_seeds="$test_seed"
     curr_ks="$test_k"
     curr_graphs="$test_graph"
-    refiners="$refiners $baseline_refiners"
     ini="$test_ini"
 fi
 
