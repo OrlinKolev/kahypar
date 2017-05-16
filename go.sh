@@ -106,7 +106,7 @@ eval_ks="2 4 8 16 32 64 128"
 test_seed="-1"
 eval_seeds="-1 42 666 664"
 
-test_graph="$KAHYPAR_TEST_DATA_DIR/ISPD98_ibm01.hgr"
+test_graph="ISPD98_ibm01.hgr"
 
 eval_graphs=$(ls "$KAHYPAR_TEST_DATA_DIR")
 
@@ -137,14 +137,15 @@ do
 IFS=$'\n'
 for graph in $curr_graphs
 do
+    file="$KAHYPAR_TEST_DATA_DIR/$graph"
     if [ "$action" == 'run' ]
     then
-        "$executable" "${args[@]}" --seed "$seed" -p "$ini" -k "$k" -h "$graph" --r-type "$refiner" \
+        "$executable" "${args[@]}" --seed "$seed" -p "$ini" -k "$k" -h "$file" --r-type "$refiner" \
             || exit 1
     elif [ "$action" == 'print' ]
     then
         echo "$executable"
-        echo "${args[@]}" --seed "$seed" -p "$ini" -k "$k" -h "$graph" --r-type "$refiner"
+        echo "${args[@]}" --seed "$seed" -p "$ini" -k "$k" -h "$file" --r-type "$refiner"
     fi
 done # graphs
 IFS=' '
