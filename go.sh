@@ -24,7 +24,7 @@ action='run'
 
 # this is used on 'run' and 'commit'
 # set to refiner currently in development
-refiners='twoway_netstatus'
+default_refiner='twoway_netstatus'
 
 # this is used on 'eval' and 'commit'
 baseline_refiners='twoway_fm'
@@ -54,6 +54,13 @@ do
     esac
     shift
 done
+
+if [ -z "$refiners" ]
+then
+    refiners="$default_refiner"
+else
+    baseline_refiners=""
+fi
 
 if [ "$action" == 'eval' ]
 then
@@ -104,7 +111,7 @@ test_k="8"
 eval_ks="2 4 8 16 32 64 128"
 
 test_seed="-1"
-eval_seeds="-1 42 666 664"
+eval_seeds="1 2 3 4 5 6 7 8 9 10"
 
 test_graph="ISPD98_ibm01.hgr"
 
