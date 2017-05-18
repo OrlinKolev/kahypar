@@ -23,7 +23,6 @@
 #include <algorithm>
 #include <array>
 #include <limits>
-#include <map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -63,7 +62,6 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   using RebalancePQ = ds::BinaryMaxHeap<HypernodeID, Gain>;
   using HypernodeWeightArray = std::array<HypernodeWeight, 2>;
   using Base = FMRefinerBase<HypernodeID, FineGain>;
-  using TempGainMap = std::unordered_map<HypernodeID, FineGain>;
 
  public:
   TwoWayNetstatusRefiner(Hypergraph& hypergraph, const Configuration& config) :
@@ -74,6 +72,8 @@ class TwoWayNetstatusRefiner final : public IRefiner,
     _non_border_hns_to_remove(),
     _gain_cache(_hg.initialNumNodes()),
     _locked_hes(_hg.initialNumEdges(), HEState::free),
+    _temp_gains(_hg.initialNumNodes(), 0),
+    _locked_pins(_hg.initialNumEdges(), 0),
     _stopping_policy() {
     ASSERT(config.partition.k == 2);
     _non_border_hns_to_remove.reserve(_hg.initialNumNodes());
@@ -89,8 +89,8 @@ class TwoWayNetstatusRefiner final : public IRefiner,
 
   FineGain getLooseHEDelta(HyperedgeID he) {
     static const Gain MAX = _config.partition.hyperedge_size_threshold;
-    FineGain size = _hg.pins(he).second - _hg.pins(he).first;
-    return (MAX / size) * (_locked_pins[he] / (size - _locked_pins[he]));
+    FineGain size = _hg.edgeSize(he);
+    return (MAX / size) * (_locked_pins.get(he) / (size - _locked_pins.get(he)));
   }
 
   void activate(const HypernodeID hn,
@@ -102,7 +102,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
       ASSERT(_gain_cache.value(hn) == computeGain(hn), V(hn)
              << V(_gain_cache.value(hn)) << V(computeGain(hn)));
 
-      _pq.insert(hn, 1 - _hg.partID(hn), _gain_cache.value(hn) + _temp_gains[hn]);
+      _pq.insert(hn, 1 - _hg.partID(hn), _gain_cache.value(hn) + _temp_gains.get(hn));
       if (_hg.partWeight(1 - _hg.partID(hn)) < max_allowed_part_weights[1 - _hg.partID(hn)]) {
         _pq.enablePart(1 - _hg.partID(hn));
       }
@@ -170,8 +170,8 @@ class TwoWayNetstatusRefiner final : public IRefiner,
     reset();
     _he_fully_active.reset();
     _locked_hes.resetUsedEntries();
-    _locked_pins.clear();
-    _temp_gains.clear();
+    _locked_pins.resetUsedEntries();
+    _temp_gains.resetUsedEntries();
 
     _gain_cache.setValue(refinement_nodes[0], computeGain(refinement_nodes[0]));
     _gain_cache.setValue(refinement_nodes[1], computeGain(refinement_nodes[1]));
@@ -216,12 +216,13 @@ class TwoWayNetstatusRefiner final : public IRefiner,
       ASSERT(!_hg.marked(max_gain_node), V(max_gain_node));
       ASSERT(_hg.isBorderNode(max_gain_node), V(max_gain_node));
 
-      ASSERT(ALMOST_EQUALS(max_gain, computeGain(max_gain_node) + _temp_gains[max_gain_node]));
-      ASSERT(ALMOST_EQUALS(max_gain, _gain_cache.value(max_gain_node) + _temp_gains[max_gain_node]));
+      ASSERT(ALMOST_EQUALS(max_gain, computeGain(max_gain_node) + _temp_gains.get(max_gain_node)));
+      ASSERT(ALMOST_EQUALS(max_gain,
+                           _gain_cache.value(max_gain_node) + _temp_gains.get(max_gain_node)));
       ASSERT([&]() {
           _hg.changeNodePart(max_gain_node, from_part, to_part);
           ASSERT(ALMOST_EQUALS(
-              (current_cut - (max_gain - _temp_gains[max_gain_node])),
+              (current_cut - (max_gain - _temp_gains.get(max_gain_node))),
               metrics::hyperedgeCut(_hg)),
                  "cut=" << current_cut - max_gain << "!=" << metrics::hyperedgeCut(_hg));
           _hg.changeNodePart(max_gain_node, to_part, from_part);
@@ -374,8 +375,9 @@ class TwoWayNetstatusRefiner final : public IRefiner,
               ASSERT(!_hg.active(pin) || _pq.contains(pin, other_part), V(pin));
               if (_pq.contains(pin, other_part)) {
                 ASSERT(!_hg.marked(pin), V(pin));
-                ASSERT(ALMOST_EQUALS(_pq.key(pin, other_part), computeGain(pin) + _temp_gains[pin]),
-                       V(pin) << V(computeGain(pin)) << V(_temp_gains[pin])
+                ASSERT(ALMOST_EQUALS(_pq.key(pin, other_part),
+                                     computeGain(pin) + _temp_gains.get(pin)),
+                       V(pin) << V(computeGain(pin)) << V(_temp_gains.get(pin))
                        << V(_pq.key(pin, other_part)) << V(_hg.partID(pin)) << V(other_part));
               } else if (!_hg.marked(pin)) {
                 ASSERT(true == false, "HN " << pin << " not in PQ, but also not marked!");
@@ -432,7 +434,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
    
     FineGain state_gain = 0;
     if (_locked_hes.get(he) == HEState::free) {
-      _locked_pins[he] = 1;
+      _locked_pins.set(he, 1);
     }
     state_gain += getLooseHEDelta(he);
 
@@ -444,7 +446,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
         state_gain *= -1;
       }
 
-      _temp_gains[pin] += state_gain;
+      _temp_gains.set(pin, _temp_gains.get(pin) + state_gain);
       if (_pq.contains(pin)) {
         _pq.updateKeyBy(pin, target_part, state_gain);
       }
@@ -543,7 +545,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
 
     if (update_local_search_pq) {
       FineGain state_gain = -getLooseHEDelta(he);
-      _locked_pins[he]++;
+      _locked_pins.set(he, _locked_pins.get(he) + 1);
       state_gain += getLooseHEDelta(he);
 
       for (const HypernodeID& pin : _hg.pins(he)) {
@@ -552,7 +554,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
           state_gain *= -1;
         }
 
-        _temp_gains[pin] += state_gain;
+        _temp_gains.set(pin, _temp_gains.get(pin) + state_gain);
         if (_pq.contains(pin)) {
           _pq.updateKeyBy(pin, target_part, state_gain);
         }
@@ -697,7 +699,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   TwoWayFMGainCache<Gain> _gain_cache;
   ds::FastResetArray<PartitionID> _locked_hes;
   StoppingPolicy _stopping_policy;
-  TempGainMap _temp_gains;
-  std::unordered_map<HyperedgeID, unsigned int> _locked_pins;
+  ds::FastResetArray<FineGain> _temp_gains;
+  ds::FastResetArray<unsigned int> _locked_pins;
 };
 }                                   // namespace kahypar
