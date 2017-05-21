@@ -28,6 +28,7 @@
 #include "kahypar/partition/initial_partitioning/i_initial_partitioner.h"
 #include "kahypar/partition/refinement/2way_fm_refiner.h"
 #include "kahypar/partition/refinement/2way_netstatus_refiner.h"
+#include "kahypar/partition/refinement/2way_soft_gain_refiner.h"
 #include "kahypar/partition/refinement/i_refiner.h"
 #include "kahypar/partition/refinement/kway_fm_cut_refiner.h"
 #include "kahypar/partition/refinement/kway_fm_km1_refiner.h"
@@ -53,6 +54,11 @@ using TwoWayFMFactoryDispatcher = meta::StaticMultiDispatchFactory<TwoWayFMRefin
                                                                                   RebalancingPolicyClasses> >;
 
 using TwoWayNetstatusFactoryDispatcher = meta::StaticMultiDispatchFactory<TwoWayNetstatusRefiner,
+                                                                   IRefiner,
+                                                                   meta::Typelist<StoppingPolicyClasses,
+                                                                                  RebalancingPolicyClasses> >;
+
+using TwoWaySoftGainFactoryDispatcher = meta::StaticMultiDispatchFactory<TwoWaySoftGainRefiner,
                                                                    IRefiner,
                                                                    meta::Typelist<StoppingPolicyClasses,
                                                                                   RebalancingPolicyClasses> >;
