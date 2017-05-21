@@ -160,4 +160,5 @@ done # refiners
 done # ks
 done # seeds
 
-rm -f "$KAHYPAR_TEST_DATA_DIR/*.KaHyPar"
+cd "$KAHYPAR_TEST_DATA_DIR"
+rm -f *.KaHyPar
