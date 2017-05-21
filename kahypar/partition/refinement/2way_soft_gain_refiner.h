@@ -59,7 +59,7 @@ template <class StoppingPolicy = Mandatory,
 class TwoWaySoftGainRefiner final : public IRefiner,
                               private FMRefinerBase<HypernodeID, FineGain>{
  private:
-  using RebalancePQ = ds::BinaryMaxHeap<HypernodeID, Gain>;
+  using RebalancePQ = ds::BinaryMaxHeap<HypernodeID, FineGain>;
   using HypernodeWeightArray = std::array<HypernodeWeight, 2>;
   using Base = FMRefinerBase<HypernodeID, FineGain>;
 
@@ -88,7 +88,7 @@ class TwoWaySoftGainRefiner final : public IRefiner,
   TwoWaySoftGainRefiner& operator= (TwoWaySoftGainRefiner&&) = delete;
 
   FineGain getLooseHEDelta(HyperedgeID he) {
-    static const Gain MAX = _config.partition.hyperedge_size_threshold;
+    static const FineGain MAX = _config.partition.hyperedge_size_threshold;
     FineGain size = _hg.edgeSize(he);
     return (MAX / size) * (_locked_pins.get(he) / (size - _locked_pins.get(he)));
   }
@@ -292,9 +292,9 @@ class TwoWaySoftGainRefiner final : public IRefiner,
   void updateNeighbours(const HypernodeID moved_hn, const PartitionID from_part,
                         const PartitionID to_part,
                         const HypernodeWeightArray& max_allowed_part_weights) {
-    const Gain temp = _gain_cache.value(moved_hn);
+    const FineGain temp = _gain_cache.value(moved_hn);
     ASSERT(-temp == computeGain(moved_hn), V(moved_hn));
-    const Gain rb_delta = _gain_cache.delta(moved_hn);
+    const FineGain rb_delta = _gain_cache.delta(moved_hn);
     _gain_cache.setNotCached(moved_hn);
     for (const HyperedgeID& he : _hg.incidentEdges(moved_hn)) {
       if (_locked_hes.get(he) != HEState::locked) {
@@ -359,7 +359,7 @@ class TwoWaySoftGainRefiner final : public IRefiner,
                 ASSERT(true == false, "HN " << pin << " not in PQ, but also not marked!");
               }
             }
-            // Gain calculation needs to be consistent in cache
+            // FineGain calculation needs to be consistent in cache
             ASSERT(!_gain_cache.isCached(pin) || _gain_cache.value(pin) == computeGain(pin),
                    V(pin) << V(_gain_cache.value(pin)) << V(computeGain(pin)));
           }
@@ -373,14 +373,14 @@ class TwoWaySoftGainRefiner final : public IRefiner,
             _pq.isEnabled(1) : !_pq.isEnabled(1)), V(1));
   }
 
-  void updateGainCache(const HypernodeID pin, const Gain gain_delta) KAHYPAR_ATTRIBUTE_ALWAYS_INLINE {
+  void updateGainCache(const HypernodeID pin, const FineGain gain_delta) KAHYPAR_ATTRIBUTE_ALWAYS_INLINE {
     // Only _gain_cache[moved_hn] = kNotCached, all other entries are cached.
     // However we set _gain_cache[moved_hn] to the correct value after all neighbors
     // are updated.
     _gain_cache.updateCacheAndDelta(pin, gain_delta);
   }
 
-  void performNonZeroFullUpdate(const HypernodeID pin, const Gain gain_delta,
+  void performNonZeroFullUpdate(const HypernodeID pin, const FineGain gain_delta,
                                 HypernodeID& num_active_pins) KAHYPAR_ATTRIBUTE_ALWAYS_INLINE {
     ASSERT(gain_delta != 0);
     if (!_hg.marked(pin)) {
@@ -402,7 +402,7 @@ class TwoWaySoftGainRefiner final : public IRefiner,
 
   // Full update includes:
   // 1.) Activation of new border HNs (lazy)
-  // 2.) Delta-Gain Update as decribed in [ParMar06].
+  // 2.) Delta-FineGain Update as decribed in [ParMar06].
   // Removal of new non-border HNs is performed lazily after all updates
   // This is used for the state transitions: free -> loose and loose -> locked
   void fullUpdate(const PartitionID from_part,
@@ -469,7 +469,7 @@ class TwoWaySoftGainRefiner final : public IRefiner,
           // Before move, there were two pins (moved_node and the current pin) in from_part.
           // After moving moved_node to to_part, the gain of the remaining pin in
           // from_part increases by w(he).
-          Gain factor = increase_necessary && _hg.partID(pin) == from_part ? 1 : 0;
+          FineGain factor = increase_necessary && _hg.partID(pin) == from_part ? 1 : 0;
           // Before move, pin was the only HN in to_part. It thus had a
           // positive gain, because moving it to from_part would have removed
           // the HE from the cut. Now, after the move, pin becomes a 0-gain HN
@@ -500,7 +500,7 @@ class TwoWaySoftGainRefiner final : public IRefiner,
     }
   }
 
-  // Delta-Gain Update as decribed in [ParMar06].
+  // Delta-FineGain Update as decribed in [ParMar06].
   // Removal of new non-border HNs is performed lazily after all updates
   // Used in the following cases:
   // - State transition: loose -> loose
@@ -609,7 +609,7 @@ class TwoWaySoftGainRefiner final : public IRefiner,
 #endif
   }
 
-  void updatePin(const HypernodeID pin, const Gain gain_delta) KAHYPAR_ATTRIBUTE_ALWAYS_INLINE {
+  void updatePin(const HypernodeID pin, const FineGain gain_delta) KAHYPAR_ATTRIBUTE_ALWAYS_INLINE {
     const PartitionID target_part = 1 - _hg.partID(pin);
     ASSERT(_hg.active(pin), V(pin) << V(target_part));
     ASSERT(_pq.contains(pin, target_part), V(pin) << V(target_part));
@@ -629,8 +629,8 @@ class TwoWaySoftGainRefiner final : public IRefiner,
     }
   }
 
-  Gain computeGain(const HypernodeID hn) const {
-    Gain gain = 0;
+  FineGain computeGain(const HypernodeID hn) const {
+    FineGain gain = 0;
     ASSERT(_hg.partID(hn) < 2);
     for (const HyperedgeID& he : _hg.incidentEdges(hn)) {
       ASSERT(_hg.edgeSize(he) > 1, V(he));
@@ -672,7 +672,7 @@ class TwoWaySoftGainRefiner final : public IRefiner,
   ds::FastResetFlagArray<> _he_fully_active;
   ds::FastResetFlagArray<> _hns_in_activation_vector;  // faster than using a SparseSet in this case
   std::vector<HypernodeID> _non_border_hns_to_remove;
-  TwoWayFMGainCache<Gain> _gain_cache;
+  TwoWayFMGainCache<FineGain> _gain_cache;
   ds::FastResetArray<PartitionID> _locked_hes;
   StoppingPolicy _stopping_policy;
   ds::FastResetArray<FineGain> _temp_gains;
