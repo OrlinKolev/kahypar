@@ -5,9 +5,9 @@
 #   -a --action : what to do (see below)
 #       DEFAULT: 'run'
 #
-#   -r --refiners : space-separated list of refiners to use. Passed on to kahypar as --r-type, one 
+#   -r --refiners : space-separated list of refiners to use. Passed on to kahypar as --r-type, one
 #                   per invocation of kahypar
-#       DEFAULT: empty; for every branch, set to refiner currently in development. 
+#       DEFAULT: empty; for every branch, set to refiner currently in development.
 #
 #   -bt --build_type : DEBUG or RELEASE. DEBUG is actually RELWITHDBGINFO
 #       DEFAULT: whatever was used on the last build
@@ -17,7 +17,7 @@
 #     build -- build only
 #     commit -- prepare for commit, i.e. run with asserts on for all relevant refiners
 #         (currently the default for the development branch and twoway_fm)
-#     print -- print the arguments 'run' would use to with kahypar 
+#     print -- print the arguments 'run' would use to with kahypar
 #     eval -- run several seeds, k-s, refiners and graphs
 
 action='run'
@@ -134,15 +134,14 @@ else
     ini="$test_ini"
 fi
 
-IFS=' '
+IFS=$' \n'
 for seed in $curr_seeds
 do
 for k in $curr_ks
 do
-for refiner in $refiners
-do
-IFS=$'\n'
 for graph in $curr_graphs
+do
+for refiner in $refiners
 do
     file="$KAHYPAR_TEST_DATA_DIR/$graph"
     if [ "$action" == 'run' ]
@@ -154,9 +153,8 @@ do
         echo "$executable"
         echo "${args[@]}" --seed "$seed" -p "$ini" -k "$k" -h "$file" --r-type "$refiner"
     fi
-done # graphs
-IFS=' '
 done # refiners
+done # graphs
 done # ks
 done # seeds
 
