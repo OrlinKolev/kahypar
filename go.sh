@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 # a utility script for building, testing, etc.
 # MUST SET KAHYPAR_TEST_DATA_DIR to parent directory of tests
 #
