@@ -149,7 +149,7 @@ do
     if [ "$action" == 'run' ]
     then
         timeout 360 "$executable" "${args[@]}" --seed "$seed" -p "$ini" -k "$k" -h "$file" \
-          --r-type "$refiner" || exit 1
+          --r-type "$refiner"
     elif [ "$action" == 'print' ]
     then
         echo "$executable"
