@@ -148,8 +148,8 @@ do
     file="$KAHYPAR_TEST_DATA_DIR/$graph"
     if [ "$action" == 'run' ]
     then
-        "$executable" "${args[@]}" --seed "$seed" -p "$ini" -k "$k" -h "$file" --r-type "$refiner" \
-            || exit 1
+        timeout 360 "$executable" "${args[@]}" --seed "$seed" -p "$ini" -k "$k" -h "$file" \
+          --r-type "$refiner" || exit 1
     elif [ "$action" == 'print' ]
     then
         echo "$executable"
