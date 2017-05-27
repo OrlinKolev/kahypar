@@ -182,7 +182,8 @@ class Louvain {
     }
 
     do {
-      LOG("######## Starting Louvain-Pass-Iteration #" << ++iterations << " ########");
+      ++iterations;
+      LOG("######## Starting Louvain-Pass-Iteration #" << iterations << " ########");
       node_moves = 0;
       for (const NodeID& node : _random_node_order) {
         const ClusterID cur_cid = graph.clusterID(node);
