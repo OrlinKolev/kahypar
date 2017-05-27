@@ -89,7 +89,8 @@ class InitialPartitionerBase {
     if (_config.initial_partitioning.refinement) {
       std::unique_ptr<IRefiner> refiner;
       if ((_config.local_search.algorithm == RefinementAlgorithm::twoway_fm ||
-           _config.local_search.algorithm == RefinementAlgorithm::twoway_netstatus) && 
+           _config.local_search.algorithm == RefinementAlgorithm::twoway_netstatus || 
+           _config.local_search.algorithm == RefinementAlgorithm::twoway_soft_gain) && 
           _config.initial_partitioning.k > 2) {
         refiner = (RefinerFactory::getInstance().createObject(
                      RefinementAlgorithm::kway_fm,

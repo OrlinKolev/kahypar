@@ -161,6 +161,7 @@ inline std::ostream& operator<< (std::ostream& str, const LocalSearchParameters&
   str << "  iterations per level:               " << params.iterations_per_level << std::endl;
   if (params.algorithm == RefinementAlgorithm::twoway_fm ||
       params.algorithm == RefinementAlgorithm::twoway_netstatus ||
+      params.algorithm == RefinementAlgorithm::twoway_soft_gain ||
       params.algorithm == RefinementAlgorithm::kway_fm ||
       params.algorithm == RefinementAlgorithm::kway_fm_km1) {
     str << "  stopping rule:                      " << toString(params.fm.stopping_rule) << std::endl;

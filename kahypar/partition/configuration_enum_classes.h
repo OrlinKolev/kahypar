@@ -44,6 +44,7 @@ enum class CoarseningAlgorithm : uint8_t {
 enum class RefinementAlgorithm : uint8_t {
   twoway_fm,
   twoway_netstatus,
+  twoway_soft_gain,
   kway_fm,
   kway_fm_maxgain,
   kway_fm_km1,
@@ -143,6 +144,8 @@ static std::string toString(const RefinementAlgorithm& algo) {
       return std::string("twoway_fm");
     case RefinementAlgorithm::twoway_netstatus:
       return std::string("twoway_netstatus");
+    case RefinementAlgorithm::twoway_soft_gain:
+      return std::string("twoway_soft_gain");
     case RefinementAlgorithm::kway_fm:
       return std::string("kway_fm");
     case RefinementAlgorithm::kway_fm_maxgain:
@@ -257,6 +260,8 @@ static RefinementAlgorithm refinementAlgorithmFromString(const std::string& type
     return RefinementAlgorithm::twoway_fm;
   } else if (type == "twoway_netstatus") {
     return RefinementAlgorithm::twoway_netstatus;
+  } else if (type == "twoway_soft_gain") {
+    return RefinementAlgorithm::twoway_soft_gain;
   } else if (type == "kway_fm") {
     return RefinementAlgorithm::kway_fm;
   } else if (type == "kway_fm_km1") {
