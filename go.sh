@@ -117,7 +117,7 @@ eval_seeds="1 2 3 4 5 6 7 8 9 10"
 
 test_graph="ISPD98_ibm01.hgr"
 
-eval_graphs=$(ls "$KAHYPAR_TEST_DATA_DIR")
+eval_graphs=$(ls "$KAHYPAR_TEST_DATA_DIR" | grep -v KaHyPar)
 
 args=( "--mode" "recursive" "--objective" "km1" "--epsilon" "0.03" )
 
