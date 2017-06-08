@@ -25,7 +25,7 @@
 namespace kahypar {
 class LastRatingWins {
  public:
-  static bool acceptEqual() {
+  KAHYPAR_ATTRIBUTE_ALWAYS_INLINE static bool acceptEqual() {
     return true;
   }
 
@@ -35,12 +35,13 @@ class LastRatingWins {
   LastRatingWins(LastRatingWins&&) = delete;
   LastRatingWins& operator= (LastRatingWins&&) = delete;
 
- protected: ~LastRatingWins() = default;
+ protected:
+  ~LastRatingWins() = default;
 };
 
 class FirstRatingWins {
  public:
-  static bool acceptEqual() {
+  KAHYPAR_ATTRIBUTE_ALWAYS_INLINE static bool acceptEqual() {
     return false;
   }
 
@@ -50,12 +51,13 @@ class FirstRatingWins {
   FirstRatingWins(FirstRatingWins&&) = delete;
   FirstRatingWins& operator= (FirstRatingWins&&) = delete;
 
- protected: ~FirstRatingWins() = default;
+ protected:
+  ~FirstRatingWins() = default;
 };
 
 class RandomRatingWins {
  public:
-  static bool acceptEqual() {
+  KAHYPAR_ATTRIBUTE_ALWAYS_INLINE static bool acceptEqual() {
     return Randomize::instance().flipCoin();
   }
 
@@ -65,6 +67,7 @@ class RandomRatingWins {
   RandomRatingWins(RandomRatingWins&&) = delete;
   RandomRatingWins& operator= (RandomRatingWins&&) = delete;
 
- protected: ~RandomRatingWins() = default;
+ protected:
+  ~RandomRatingWins() = default;
 };
 }  // namespace kahypar

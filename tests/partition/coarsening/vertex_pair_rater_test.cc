@@ -23,29 +23,45 @@
 #include "gmock/gmock.h"
 
 #include "kahypar/definitions.h"
-#include "kahypar/partition/coarsening/heavy_edge_rater.h"
+#include "kahypar/partition/coarsening/policies/rating_acceptance_policy.h"
+#include "kahypar/partition/coarsening/policies/rating_community_policy.h"
+#include "kahypar/partition/coarsening/policies/rating_heavy_node_penalty_policy.h"
+#include "kahypar/partition/coarsening/policies/rating_score_policy.h"
 #include "kahypar/partition/coarsening/policies/rating_tie_breaking_policy.h"
+#include "kahypar/partition/coarsening/vertex_pair_rater.h"
 
-using::testing::Test;
-using::testing::Eq;
-using::testing::DoubleEq;
-using::testing::AnyOf;
+using ::testing::Test;
+using ::testing::Eq;
+using ::testing::DoubleEq;
+using ::testing::AnyOf;
 
 namespace kahypar {
-using FirstWinsRater = HeavyEdgeRater<RatingType, FirstRatingWins>;
-using LastWinsRater = HeavyEdgeRater<RatingType, LastRatingWins>;
-using RandomWinsRater = HeavyEdgeRater<RatingType, RandomRatingWins>;
+using FirstWinsRater = VertexPairRater<HeavyEdgeScore,
+                                       MultiplicativePenalty,
+                                       UseCommunityStructure,
+                                       BestRatingWithTieBreaking<FirstRatingWins>,
+                                       RatingType>;
+using LastWinsRater = VertexPairRater<HeavyEdgeScore,
+                                      MultiplicativePenalty,
+                                      UseCommunityStructure,
+                                      BestRatingWithTieBreaking<LastRatingWins>,
+                                      RatingType>;
+using RandomWinsRater = VertexPairRater<HeavyEdgeScore,
+                                        MultiplicativePenalty,
+                                        UseCommunityStructure,
+                                        BestRatingWithTieBreaking<RandomRatingWins>,
+                                        RatingType>;
 
 class ARater : public Test {
  public:
   explicit ARater(Hypergraph* graph = nullptr) :
     hypergraph(graph),
-    config() {
-    config.coarsening.max_allowed_node_weight = 2;
+    context() {
+    context.coarsening.max_allowed_node_weight = 2;
   }
 
   std::unique_ptr<Hypergraph> hypergraph;
-  Configuration config;
+  Context context;
 };
 
 class AFirstWinsRater : public ARater {
@@ -53,7 +69,7 @@ class AFirstWinsRater : public ARater {
   AFirstWinsRater() :
     ARater(new Hypergraph(7, 4, HyperedgeIndexVector { 0, 2, 6, 9,  /*sentinel*/ 12 },
                           HyperedgeVector { 0, 2, 0, 1, 3, 4, 3, 4, 6, 2, 5, 6 })),
-    rater(*hypergraph, config) { }
+    rater(*hypergraph, context) { }
 
   FirstWinsRater rater;
 };
@@ -63,7 +79,7 @@ class ALastWinsRater : public ARater {
   ALastWinsRater() :
     ARater(new Hypergraph(7, 4, HyperedgeIndexVector { 0, 2, 6, 9,  /*sentinel*/ 12 },
                           HyperedgeVector { 0, 2, 0, 1, 3, 4, 3, 4, 6, 2, 5, 6 })),
-    rater(*hypergraph, config) { }
+    rater(*hypergraph, context) { }
 
   LastWinsRater rater;
 };
@@ -73,7 +89,7 @@ class ARandomWinsRater : public ARater {
   ARandomWinsRater() :
     ARater(new Hypergraph(7, 4, HyperedgeIndexVector { 0, 2, 6, 9,  /*sentinel*/ 12 },
                           HyperedgeVector { 0, 2, 0, 1, 3, 4, 3, 4, 6, 2, 5, 6 })),
-    rater(*hypergraph, config) { }
+    rater(*hypergraph, context) { }
 
   RandomWinsRater rater;
 };
@@ -131,7 +147,7 @@ TEST_F(ARater, ReturnsInvalidRatingIfTargetNotIsNotInSamePartition) {
   hypergraph.reset(new Hypergraph(2, 1, HyperedgeIndexVector { 0, 2 },
                                   HyperedgeVector { 0, 1 }));
 
-  FirstWinsRater rater(*hypergraph, config);
+  FirstWinsRater rater(*hypergraph, context);
 
   ASSERT_THAT(rater.rate(0).target, Eq(1));
   ASSERT_THAT(rater.rate(0).value, Eq(1));

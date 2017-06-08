@@ -28,14 +28,19 @@
 #include "kahypar/definitions.h"
 #include "kahypar/kahypar.h"
 #include "kahypar/partition/coarsening/full_vertex_pair_coarsener.h"
-#include "kahypar/partition/coarsening/heavy_edge_rater.h"
 #include "kahypar/partition/coarsening/i_coarsener.h"
-#include "kahypar/partition/partitioner.h"
+#include "kahypar/partition/coarsening/policies/rating_acceptance_policy.h"
+#include "kahypar/partition/coarsening/policies/rating_community_policy.h"
+#include "kahypar/partition/coarsening/policies/rating_heavy_node_penalty_policy.h"
+#include "kahypar/partition/coarsening/policies/rating_score_policy.h"
+#include "kahypar/partition/coarsening/policies/rating_tie_breaking_policy.h"
+#include "kahypar/partition/coarsening/vertex_pair_rater.h"
+#include "kahypar/partition/multilevel.h"
 #include "kahypar/partition/refinement/2way_fm_refiner.h"
 #include "kahypar/partition/refinement/i_refiner.h"
 #include "kahypar/partition/refinement/policies/fm_stop_policy.h"
 
-using::testing::Test;
+using ::testing::Test;
 
 namespace kahypar {
 namespace io {
@@ -206,8 +211,11 @@ class AHypergraphWithHypernodeAndHyperedgeWeights : public AnUnweightedHypergrap
   HypernodeWeightVector _written_hypernode_weights;
 };
 
-using FirstWinsRater = HeavyEdgeRater<RatingType, FirstRatingWins>;
-using FirstWinsCoarsener = FullVertexPairCoarsener<FirstWinsRater>;
+using FirstWinsCoarsener = FullVertexPairCoarsener<HeavyEdgeScore,
+                                                   MultiplicativePenalty,
+                                                   UseCommunityStructure,
+                                                   BestRatingWithTieBreaking<FirstRatingWins>,
+                                                   RatingType>;
 using Refiner = TwoWayFMRefiner<NumberOfFruitlessMovesStopsSearch>;
 
 class APartitionOfAHypergraph : public Test {
@@ -215,34 +223,32 @@ class APartitionOfAHypergraph : public Test {
   APartitionOfAHypergraph() :
     _hypergraph(7, 4, HyperedgeIndexVector { 0, 2, 6, 9,  /*sentinel*/ 12 },
                 HyperedgeVector { 0, 2, 0, 1, 3, 4, 3, 4, 6, 2, 5, 6 }),
-    _config(),
-    _partitioner(),
-    _coarsener(new FirstWinsCoarsener(_hypergraph, _config,  /* heaviest_node_weight */ 1)),
-    _refiner(new Refiner(_hypergraph, _config)) {
-    _config.partition.k = 2;
-    _config.partition.rb_lower_k = 0;
-    _config.partition.rb_upper_k = _config.partition.k - 1;
-    _config.partition.total_graph_weight = 7;
-    _config.local_search.algorithm = RefinementAlgorithm::twoway_fm;
-    _config.coarsening.contraction_limit = 2;
-    _config.coarsening.max_allowed_node_weight = 5;
-    _config.partition.graph_filename = "APartitionOfAHypergraphTest";
-    _config.partition.graph_partition_filename = "APartitionOfAHypergraphTest.hgr.part.2.KaHyPar";
-    _config.partition.perfect_balance_part_weights[0] = ceil(7.0 / 2);
-    _config.partition.perfect_balance_part_weights[1] = ceil(7.0 / 2);
-    _config.partition.max_part_weights[0] = (1 + _config.partition.epsilon)
-                                            * _config.partition.perfect_balance_part_weights[0];
-    _config.partition.max_part_weights[1] = (1 + _config.partition.epsilon) *
-                                            _config.partition.perfect_balance_part_weights[1];
+    _context(),
+    _coarsener(new FirstWinsCoarsener(_hypergraph, _context,  /* heaviest_node_weight */ 1)),
+    _refiner(new Refiner(_hypergraph, _context)) {
+    _context.partition.k = 2;
+    _context.partition.rb_lower_k = 0;
+    _context.partition.rb_upper_k = _context.partition.k - 1;
+    _context.partition.total_graph_weight = 7;
+    _context.local_search.algorithm = RefinementAlgorithm::twoway_fm;
+    _context.coarsening.contraction_limit = 2;
+    _context.coarsening.max_allowed_node_weight = 5;
+    _context.partition.graph_filename = "APartitionOfAHypergraphTest";
+    _context.partition.graph_partition_filename = "APartitionOfAHypergraphTest.hgr.part.2.KaHyPar";
+    _context.partition.perfect_balance_part_weights[0] = ceil(7.0 / 2);
+    _context.partition.perfect_balance_part_weights[1] = ceil(7.0 / 2);
+    _context.partition.max_part_weights[0] = (1 + _context.partition.epsilon)
+                                             * _context.partition.perfect_balance_part_weights[0];
+    _context.partition.max_part_weights[1] = (1 + _context.partition.epsilon) *
+                                             _context.partition.perfect_balance_part_weights[1];
   }
 
   void TearDown() {
-    std::remove(_config.partition.graph_partition_filename.c_str());
+    std::remove(_context.partition.graph_partition_filename.c_str());
   }
 
   Hypergraph _hypergraph;
-  Configuration _config;
-  Partitioner _partitioner;
+  Context _context;
   std::unique_ptr<ICoarsener> _coarsener;
   std::unique_ptr<IRefiner> _refiner;
 };

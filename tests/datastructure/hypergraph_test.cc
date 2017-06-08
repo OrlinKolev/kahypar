@@ -29,9 +29,9 @@
 #include "kahypar/partition/coarsening/hypergraph_pruner.h"
 #include "tests/datastructure/hypergraph_test_fixtures.h"
 
-using::testing::Eq;
-using::testing::ContainerEq;
-using::testing::Test;
+using ::testing::Eq;
+using ::testing::ContainerEq;
+using ::testing::Test;
 
 namespace kahypar {
 namespace ds {
@@ -662,8 +662,17 @@ TEST_F(AHypergraph, MaintainsItsTotalWeight) {
 }
 
 TEST_F(APartitionedHypergraph, CanBeDecomposedIntoHypergraphs) {
-  auto extr_part0 = extractPartAsUnpartitionedHypergraphForBisection(hypergraph, 0);
-  auto extr_part1 = extractPartAsUnpartitionedHypergraphForBisection(hypergraph, 1);
+  hypergraph._communities[0] = 0;
+  hypergraph._communities[1] = 2;
+  hypergraph._communities[2] = 4;
+  hypergraph._communities[3] = 6;
+  hypergraph._communities[4] = 8;
+  hypergraph._communities[5] = 10;
+  hypergraph._communities[6] = 12;
+
+  auto extr_part0 = extractPartAsUnpartitionedHypergraphForBisection(hypergraph, 0, Objective::cut);
+  auto extr_part1 = extractPartAsUnpartitionedHypergraphForBisection(hypergraph, 1, Objective::cut);
+
   Hypergraph& part0_hypergraph = *extr_part0.first;
   Hypergraph& part1_hypergraph = *extr_part1.first;
 
@@ -681,6 +690,9 @@ TEST_F(APartitionedHypergraph, CanBeDecomposedIntoHypergraphs) {
 
   ASSERT_THAT(mapping_0, ContainerEq(std::vector<HypernodeID>{ 0, 1, 3, 4 }));
   ASSERT_THAT(mapping_1, ContainerEq(std::vector<HypernodeID>{ 2, 5, 6 }));
+
+  ASSERT_THAT(part0_hypergraph._communities, ContainerEq(std::vector<PartitionID>{ 0, 2, 6, 8 }));
+  ASSERT_THAT(part1_hypergraph._communities, ContainerEq(std::vector<PartitionID>{ 4, 10, 12 }));
 }
 
 TEST_F(AHypergraph, WithOnePartitionEqualsTheExtractedHypergraphExceptForPartitionRelatedInfos) {
@@ -691,7 +703,16 @@ TEST_F(AHypergraph, WithOnePartitionEqualsTheExtractedHypergraphExceptForPartiti
   hypergraph.setNodePart(4, 0);
   hypergraph.setNodePart(5, 0);
   hypergraph.setNodePart(6, 0);
-  auto extr_part0 = extractPartAsUnpartitionedHypergraphForBisection(hypergraph, 0);
+
+  hypergraph._communities[0] = 0;
+  hypergraph._communities[1] = 2;
+  hypergraph._communities[2] = 4;
+  hypergraph._communities[3] = 6;
+  hypergraph._communities[4] = 8;
+  hypergraph._communities[5] = 10;
+  hypergraph._communities[6] = 12;
+
+  auto extr_part0 = extractPartAsUnpartitionedHypergraphForBisection(hypergraph, 0, Objective::cut);
   ASSERT_THAT(verifyEquivalenceWithoutPartitionInfo(hypergraph, *extr_part0.first), Eq(true));
 }
 
@@ -703,7 +724,7 @@ TEST_F(AHypergraph, ExtractedFromAPartitionedHypergraphHasInitializedPartitionIn
   hypergraph.setNodePart(4, 0);
   hypergraph.setNodePart(5, 0);
   hypergraph.setNodePart(6, 0);
-  auto extr_part0 = extractPartAsUnpartitionedHypergraphForBisection(hypergraph, 0);
+  auto extr_part0 = extractPartAsUnpartitionedHypergraphForBisection(hypergraph, 0, Objective::cut);
 
   ASSERT_THAT(extr_part0.first->_part_info.size(), Eq(2));
   ASSERT_THAT(extr_part0.first->_pins_in_part.size(), Eq(8));
@@ -726,7 +747,7 @@ TEST_F(AHypergraph, ExtractedFromAPartitionedHypergraphHasCorrectNumberOfHypered
   hypergraph.setNodePart(4, 0);
   hypergraph.setNodePart(5, 1);
   hypergraph.setNodePart(6, 0);
-  auto extr_part0 = extractPartAsUnpartitionedHypergraphForBisection(hypergraph, 0);
+  auto extr_part0 = extractPartAsUnpartitionedHypergraphForBisection(hypergraph, 0, Objective::cut);
   ASSERT_THAT(extr_part0.first->currentNumEdges(), Eq(2));
 }
 
@@ -738,7 +759,7 @@ TEST_F(AHypergraph, ExtractedFromAPartitionedHypergraphHasCorrectNumberOfHyperno
   hypergraph.setNodePart(4, 0);
   hypergraph.setNodePart(5, 1);
   hypergraph.setNodePart(6, 0);
-  auto extr_part0 = extractPartAsUnpartitionedHypergraphForBisection(hypergraph, 0);
+  auto extr_part0 = extractPartAsUnpartitionedHypergraphForBisection(hypergraph, 0, Objective::cut);
   ASSERT_THAT(extr_part0.first->initialNumNodes(), Eq(5));
 }
 
@@ -750,8 +771,8 @@ TEST_F(AHypergraph, CanBeDecomposedIntoHypergraphsUsingCutNetSplitting) {
   hypergraph.setNodePart(4, 0);
   hypergraph.setNodePart(5, 1);
   hypergraph.setNodePart(6, 1);
-  auto extr_part0 = extractPartAsUnpartitionedHypergraphForBisection(hypergraph, 0, true);
-  auto extr_part1 = extractPartAsUnpartitionedHypergraphForBisection(hypergraph, 1, true);
+  auto extr_part0 = extractPartAsUnpartitionedHypergraphForBisection(hypergraph, 0, Objective::km1);
+  auto extr_part1 = extractPartAsUnpartitionedHypergraphForBisection(hypergraph, 1, Objective::km1);
   Hypergraph& part0_hypergraph = *extr_part0.first;
   Hypergraph& part1_hypergraph = *extr_part1.first;
 
@@ -781,12 +802,22 @@ TEST_F(AHypergraph, WithContractedHypernodesCanBeReindexed) {
   hypergraph.contract(0, 2);
   hypergraph.removeEdge(1);
 
+  hypergraph._communities[0] = 0;
+  hypergraph._communities[1] = 2;
+  hypergraph._communities[2] = 4;
+  hypergraph._communities[3] = 6;
+  hypergraph._communities[4] = 8;
+  hypergraph._communities[5] = 10;
+  hypergraph._communities[6] = 12;
+
   auto reindexed = reindex(hypergraph);
 
   ASSERT_THAT(reindexed.first->initialNumNodes(), Eq(5));
   ASSERT_THAT(reindexed.first->currentNumEdges(), Eq(3));
   ASSERT_THAT(reindexed.second.size(), Eq(5));
   ASSERT_THAT(reindexed.second, ContainerEq(std::vector<HypernodeID>{ 0, 1, 3, 5, 6 }));
+  ASSERT_THAT(reindexed.first->_communities,
+              ContainerEq(std::vector<PartitionID>{ 0, 2, 6, 10, 12 }));
 }
 
 TEST_F(APartitionedHypergraph, CanBeResetToUnpartitionedState) {

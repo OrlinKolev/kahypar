@@ -28,8 +28,8 @@
 #include "kahypar/datastructure/graph.h"
 #include "kahypar/definitions.h"
 
-using::testing::Eq;
-using::testing::Test;
+using ::testing::Eq;
+using ::testing::Test;
 
 
 namespace kahypar {
@@ -38,15 +38,15 @@ class ABipartiteGraph : public Test {
  public:
   ABipartiteGraph() :
     graph(nullptr),
-    config(),
+    context(),
     hypergraph(7, 4, HyperedgeIndexVector { 0, 2, 6, 9, 12 },
                HyperedgeVector { 0, 2, 0, 1, 3, 4, 3, 4, 6, 2, 5, 6 }) {
-    config.preprocessing.louvain_community_detection.edge_weight = LouvainEdgeWeight::non_uniform;
-    graph = std::make_shared<Graph>(hypergraph, config);
+    context.preprocessing.community_detection.edge_weight = LouvainEdgeWeight::non_uniform;
+    graph = std::make_shared<Graph>(hypergraph, context);
   }
 
   std::shared_ptr<Graph> graph;
-  Configuration config;
+  Context context;
   Hypergraph hypergraph;
 };
 
@@ -165,32 +165,32 @@ TEST_F(ABipartiteGraph, DeterminesIncidentClusterWeightsOfAClusterCorrect) {
   auto cluster2 = std::make_pair(node_ids.begin() + 8,
                                  node_ids.begin() + 11);
 
-  //Checks incident clusters of cluster with ID 0
+  // Checks incident clusters of cluster with ID 0
   std::vector<EdgeWeight> cluster_weight = { 2.0L, 0.25L, 1.0L / 3.0L };
   std::vector<bool> incident_cluster = { true, true, true };
   for (const auto& incidentClusterWeight : graph->incidentClusterWeightOfCluster(cluster0)) {
-    ClusterID c_id = incidentClusterWeight.clusterID;
-    EdgeWeight weight = incidentClusterWeight.weight;
+    const ClusterID c_id = incidentClusterWeight.clusterID;
+    const EdgeWeight weight = incidentClusterWeight.weight;
     ASSERT_TRUE(incident_cluster[c_id]);
     ASSERT_LE(std::abs(cluster_weight[c_id] - weight), Graph::kEpsilon);
   }
 
-  //Checks incident clusters of cluster with ID 1
+  // Checks incident clusters of cluster with ID 1
   cluster_weight = { 1.0L / 4.0L, 1.5L + 4.0L / 3.0L, 1.0L / 3.0L };
   incident_cluster = { true, true, true };
   for (const auto& incidentClusterWeight : graph->incidentClusterWeightOfCluster(cluster1)) {
-    ClusterID c_id = incidentClusterWeight.clusterID;
-    EdgeWeight weight = incidentClusterWeight.weight;
+    const ClusterID c_id = incidentClusterWeight.clusterID;
+    const EdgeWeight weight = incidentClusterWeight.weight;
     ASSERT_TRUE(incident_cluster[c_id]);
     ASSERT_LE(std::abs(cluster_weight[c_id] - weight), Graph::kEpsilon);
   }
 
-  //Checks incident clusters of cluster with ID 2
+  // Checks incident clusters of cluster with ID 2
   cluster_weight = { 1.0L / 3.0L, 1.0L / 3.0L, 4.0L / 3.0L };
   incident_cluster = { true, true, true };
   for (const auto& incidentClusterWeight : graph->incidentClusterWeightOfCluster(cluster2)) {
-    ClusterID c_id = incidentClusterWeight.clusterID;
-    EdgeWeight weight = incidentClusterWeight.weight;
+    const ClusterID c_id = incidentClusterWeight.clusterID;
+    const EdgeWeight weight = incidentClusterWeight.weight;
     ASSERT_TRUE(incident_cluster[c_id]);
     ASSERT_LE(std::abs(cluster_weight[c_id] - weight), Graph::kEpsilon);
   }
@@ -206,7 +206,6 @@ TEST_F(ABipartiteGraph, ReturnsCorrectMappingToContractedGraph) {
   graph->setClusterID(5, 6);
   graph->setClusterID(10, 6);
   auto contractedGraph = graph->contractClusters();
-  Graph graph(std::move(contractedGraph.first));
   std::vector<NodeID> mappingToOriginalGraph = contractedGraph.second;
   std::vector<NodeID> correctMappingToOriginalGraph = { 0, 1, 0, 1, 1, 2, 2, 0, 1, 1, 2 };
   for (size_t i = 0; i < mappingToOriginalGraph.size(); ++i) {
@@ -223,38 +222,36 @@ TEST_F(ABipartiteGraph, ReturnCorrectContractedGraph) {
   graph->setClusterID(9, 3);
   graph->setClusterID(5, 6);
   graph->setClusterID(10, 6);
-  auto contractedGraph = graph->contractClusters();
-  Graph graph(std::move(contractedGraph.first));
-  std::vector<NodeID> mappingToOriginalGraph = contractedGraph.second;
+  Graph new_graph(std::move(graph->contractClusters().first));
 
-  ASSERT_EQ(3, graph.numNodes());
+  ASSERT_EQ(3, new_graph.numNodes());
 
-  //Check cluster 0
+  // Check cluster 0
   std::vector<EdgeWeight> edge_weight = { 2.0L, 0.25L, 1.0L / 3.0L };
   std::vector<bool> incident_nodes = { true, true, true };
-  for (const Edge& e : graph.incidentEdges(0)) {
-    NodeID n_id = e.target_node;
-    EdgeWeight weight = e.weight;
+  for (const Edge& e : new_graph.incidentEdges(0)) {
+    const NodeID n_id = e.target_node;
+    const EdgeWeight weight = e.weight;
     ASSERT_TRUE(incident_nodes[n_id]);
     ASSERT_LE(std::abs(edge_weight[n_id] - weight), Graph::kEpsilon);
   }
 
-  //Check cluster 1
+  // Check cluster 1
   edge_weight = { 1.0L / 4.0L, 1.5L + 4.0L / 3.0L, 1.0L / 3.0L };
   incident_nodes = { true, true, true };
-  for (const Edge& e : graph.incidentEdges(1)) {
-    NodeID n_id = e.target_node;
-    EdgeWeight weight = e.weight;
+  for (const Edge& e : new_graph.incidentEdges(1)) {
+    const NodeID n_id = e.target_node;
+    const EdgeWeight weight = e.weight;
     ASSERT_TRUE(incident_nodes[n_id]);
     ASSERT_LE(std::abs(edge_weight[n_id] - weight), Graph::kEpsilon);
   }
 
-  //Check cluster 2
+  // Check cluster 2
   edge_weight = { 1.0L / 3.0L, 1.0L / 3.0L, 4.0L / 3.0L };
   incident_nodes = { true, true, true };
-  for (const Edge& e : graph.incidentEdges(2)) {
-    NodeID n_id = e.target_node;
-    EdgeWeight weight = e.weight;
+  for (const Edge& e :  new_graph.incidentEdges(2)) {
+    const NodeID n_id = e.target_node;
+    const EdgeWeight weight = e.weight;
     ASSERT_TRUE(incident_nodes[n_id]);
     ASSERT_LE(std::abs(edge_weight[n_id] - weight), Graph::kEpsilon);
   }
@@ -269,13 +266,11 @@ TEST_F(ABipartiteGraph, HasCorrectSelfloopWeights) {
   graph->setClusterID(9, 3);
   graph->setClusterID(5, 6);
   graph->setClusterID(10, 6);
-  auto contractedGraph = graph->contractClusters();
-  Graph graph(std::move(contractedGraph.first));
-  std::vector<NodeID> mappingToOriginalGraph = contractedGraph.second;
+  Graph new_graph(std::move(graph->contractClusters().first));
 
-  ASSERT_LE(std::abs(2.0L - graph.selfloopWeight(0)), Graph::kEpsilon);
-  ASSERT_LE(std::abs((1.5L + 4.0L / 3.0L) - graph.selfloopWeight(1)), Graph::kEpsilon);
-  ASSERT_LE(std::abs(4.0L / 3.0L - graph.selfloopWeight(2)), Graph::kEpsilon);
+  ASSERT_LE(std::abs(2.0L - new_graph.selfloopWeight(0)), Graph::kEpsilon);
+  ASSERT_LE(std::abs((1.5L + 4.0L / 3.0L) - new_graph.selfloopWeight(1)), Graph::kEpsilon);
+  ASSERT_LE(std::abs(4.0L / 3.0L - new_graph.selfloopWeight(2)), Graph::kEpsilon);
 }
-}  //namespace ds
-}  //namespace kahypar
+}  // namespace ds
+}  // namespace kahypar

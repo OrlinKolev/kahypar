@@ -23,8 +23,8 @@
 #include "kahypar/io/hypergraph_io.h"
 #include "tests/io/hypergraph_io_test_fixtures.h"
 
-using::testing::Eq;
-using::testing::ContainerEq;
+using ::testing::Eq;
+using ::testing::ContainerEq;
 
 namespace kahypar {
 namespace io {
@@ -198,11 +198,11 @@ TEST_F(AHypergraphWithHypernodeAndHyperedgeWeights, CanBeWrittenToFile) {
 }
 
 TEST_F(APartitionOfAHypergraph, IsCorrectlyWrittenToFile) {
-  _partitioner.performPartitioning(_hypergraph, *_coarsener, *_refiner, _config);
-  writePartitionFile(_hypergraph, _config.partition.graph_partition_filename);
+  multilevel::partition(_hypergraph, *_coarsener, *_refiner, _context);
+  writePartitionFile(_hypergraph, _context.partition.graph_partition_filename);
 
   std::vector<PartitionID> read_partition;
-  readPartitionFile(_config.partition.graph_partition_filename, read_partition);
+  readPartitionFile(_context.partition.graph_partition_filename, read_partition);
   for (const HypernodeID& hn : _hypergraph.nodes()) {
     ASSERT_THAT(read_partition[hn], Eq(_hypergraph.partID(hn)));
   }
@@ -232,7 +232,7 @@ TEST(AHypergraph, CanBeSerializedToPaToHFormat) {
   }
   file.close();
 
-  LOG(serialized_lines.size());
+  LOG << serialized_lines.size();
 
   file.open("test_instances/example_hypergraph.patoh", std::ifstream::in);
   while (getline(file, tmp)) {

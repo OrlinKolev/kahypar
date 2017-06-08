@@ -27,8 +27,11 @@
 #include "tests/partition/coarsening/vertex_pair_coarsener_test_fixtures.h"
 
 namespace kahypar {
-using FirstWinsRater = HeavyEdgeRater<RatingType, FirstRatingWins>;
-using CoarsenerType = LazyVertexPairCoarsener<FirstWinsRater>;
+using CoarsenerType = LazyVertexPairCoarsener<HeavyEdgeScore,
+                                              MultiplicativePenalty,
+                                              UseCommunityStructure,
+                                              BestRatingWithTieBreaking<FirstRatingWins>,
+                                              RatingType>;
 
 class ACoarsener : public ACoarsenerBase<CoarsenerType>{
  public:
@@ -76,15 +79,15 @@ TEST(AnUncoarseningOperation, RestoresSingleNodeHyperedgesInReverseOrder) {
 }
 
 TEST_F(ACoarsener, DoesNotCoarsenUntilCoarseningLimit) {
-  doesNotCoarsenUntilCoarseningLimit(coarsener, hypergraph, config);
+  doesNotCoarsenUntilCoarseningLimit(coarsener, hypergraph, context);
 }
 
 TEST(ALazyUpdateCoarsener, InvalidatesAdjacentHypernodesInsteadOfReratingThem) {
   Hypergraph hypergraph(5, 2, HyperedgeIndexVector { 0, 2,  /*sentinel*/ 7 },
                         HyperedgeVector { 0, 1, 0, 1, 2, 3, 4 });
-  Configuration config;
-  config.coarsening.max_allowed_node_weight = 5;
-  CoarsenerType coarsener(hypergraph, config,  /* heaviest_node_weight */ 1);
+  Context context;
+  context.coarsening.max_allowed_node_weight = 5;
+  CoarsenerType coarsener(hypergraph, context,  /* heaviest_node_weight */ 1);
 
   coarsener.coarsen(4);
   hypergraph.printGraphState();

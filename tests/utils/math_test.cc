@@ -22,7 +22,7 @@
 
 #include "kahypar/utils/math.h"
 
-using::testing::Eq;
+using ::testing::Eq;
 
 namespace kahypar {
 namespace math {
@@ -37,6 +37,15 @@ TEST(NearestMultipleOf, WorksAsExpected) {
   ASSERT_THAT(nearestMultipleOf(2, 64), Eq(64));
   ASSERT_THAT(nearestMultipleOf(64, 64), Eq(64));
   ASSERT_THAT(nearestMultipleOf(65, 64), Eq(128));
+}
+
+TEST(Digits, ReturnsTheNumberOfDigitsOfInteger) {
+  ASSERT_THAT(digits(0), Eq(1));
+  ASSERT_THAT(digits(1), Eq(1));
+  ASSERT_THAT(digits(65), Eq(2));
+  ASSERT_THAT(digits(1234567), Eq(7));
+  ASSERT_THAT(digits(100), Eq(3));
+  ASSERT_THAT(digits(9999999999999999999ull), Eq(19));
 }
 }  // namespace math
 }  // namespace kahypar

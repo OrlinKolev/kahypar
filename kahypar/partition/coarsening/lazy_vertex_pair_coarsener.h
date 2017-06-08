@@ -26,25 +26,39 @@
 
 #include "kahypar/datastructure/fast_reset_flag_array.h"
 #include "kahypar/definitions.h"
-#include "kahypar/meta/mandatory.h"
-#include "kahypar/meta/template_parameter_to_string.h"
 #include "kahypar/partition/coarsening/i_coarsener.h"
+#include "kahypar/partition/coarsening/policies/rating_acceptance_policy.h"
+#include "kahypar/partition/coarsening/policies/rating_community_policy.h"
+#include "kahypar/partition/coarsening/policies/rating_heavy_node_penalty_policy.h"
+#include "kahypar/partition/coarsening/policies/rating_score_policy.h"
+#include "kahypar/partition/coarsening/policies/rating_tie_breaking_policy.h"
 #include "kahypar/partition/coarsening/vertex_pair_coarsener_base.h"
-#include "kahypar/utils/stats.h"
+#include "kahypar/partition/coarsening/vertex_pair_rater.h"
 
 namespace kahypar {
-template <class Rater = Mandatory>
+template <class ScorePolicy = HeavyEdgeScore,
+          class HeavyNodePenaltyPolicy = MultiplicativePenalty,
+          class CommunityPolicy = UseCommunityStructure,
+          class AcceptancePolicy = BestRatingWithTieBreaking<>,
+          typename RatingType = RatingType>
 class LazyVertexPairCoarsener final : public ICoarsener,
                                       private VertexPairCoarsenerBase<>{
  private:
+  static constexpr bool debug = false;
+
+  using Rater = VertexPairRater<ScorePolicy,
+                                HeavyNodePenaltyPolicy,
+                                CommunityPolicy,
+                                AcceptancePolicy,
+                                RatingType>;
   using Base = VertexPairCoarsenerBase;
   using Rating = typename Rater::Rating;
 
  public:
-  LazyVertexPairCoarsener(Hypergraph& hypergraph, const Configuration& config,
+  LazyVertexPairCoarsener(Hypergraph& hypergraph, const Context& context,
                           const HypernodeWeight weight_of_heaviest_node) :
-    Base(hypergraph, config, weight_of_heaviest_node),
-    _rater(_hg, _config),
+    Base(hypergraph, context, weight_of_heaviest_node),
+    _rater(_hg, _context),
     _outdated_rating(hypergraph.initialNumNodes()),
     _target(_hg.initialNumNodes()) { }
 
@@ -61,27 +75,24 @@ class LazyVertexPairCoarsener final : public ICoarsener,
 
   void coarsenImpl(const HypernodeID limit) override final {
     _pq.clear();
-    if (_config.preprocessing.enable_louvain_community_detection) {
-      _rater.performLouvainCommunityDetection();
-    }
+
     rateAllHypernodes(_rater, _target);
 
     while (!_pq.empty() && _hg.currentNumNodes() > limit) {
       const HypernodeID rep_node = _pq.top();
 
       if (_outdated_rating[rep_node]) {
-        DBG(dbg_coarsening_coarsen,
-            "Rating for HN" << rep_node << " is invalid: " << _pq.topKey() << "--->"
-            << _rater.rate(rep_node).value << " target=" << _rater.rate(rep_node).target
-            << " valid= " << _rater.rate(rep_node).valid);
+        DBG << "Rating for HN" << rep_node << "is invalid:" << _pq.topKey() << "--->"
+            << _rater.rate(rep_node).value << "target=" << _rater.rate(rep_node).target
+            << "valid=" << _rater.rate(rep_node).valid;
         updatePQandContractionTarget(rep_node, _rater.rate(rep_node));
       } else {
         const HypernodeID contracted_node = _target[rep_node];
 
-        DBG(dbg_coarsening_coarsen, "Contracting: (" << rep_node << ","
-            << _target[rep_node] << ") prio: " << _pq.topKey() <<
-            " deg(" << rep_node << ")=" << _hg.nodeDegree(rep_node) <<
-            " deg(" << contracted_node << ")=" << _hg.nodeDegree(contracted_node));
+        DBG << "Contracting: (" << rep_node << ","
+            << _target[rep_node] << ") prio:" << _pq.topKey() <<
+          " deg(" << rep_node << ")=" << _hg.nodeDegree(rep_node) <<
+          " deg(" << contracted_node << ")=" << _hg.nodeDegree(contracted_node);
 
         ASSERT(_hg.nodeWeight(rep_node) + _hg.nodeWeight(_target[rep_node])
                <= _rater.thresholdNodeWeight());
@@ -105,10 +116,6 @@ class LazyVertexPairCoarsener final : public ICoarsener,
     return Base::doUncoarsen(refiner);
   }
 
-  std::string policyStringImpl() const override final {
-    return std::string(" ratingFunction=" + meta::templateToString<Rater>());
-  }
-
   void invalidateAffectedHypernodes(const HypernodeID rep_node) {
     for (const HyperedgeID& he : _hg.incidentEdges(rep_node)) {
       for (const HypernodeID& pin : _hg.pins(he)) {
@@ -128,19 +135,16 @@ class LazyVertexPairCoarsener final : public ICoarsener,
       // method is only called on rep_node, which is definetly in the PQ.
       ASSERT(_pq.contains(hn), V(hn));
       _pq.remove(hn);
-      DBG(dbg_coarsening_no_valid_contraction, "Progress [" << _hg.currentNumNodes() << "/"
-          << _hg.initialNumNodes() << "]:HN " << hn
-          << " \t(w=" << _hg.nodeWeight(hn) << "," << " deg=" << _hg.nodeDegree(hn)
-          << ") did not find valid contraction partner.");
-#ifdef GATHER_STATS
-      Stats::instance().add(_config, "numHNsWithoutValidContractionPartner", 1);
-#endif
+      DBG << "Progress [" << _hg.currentNumNodes() << "/"
+          << _hg.initialNumNodes() << "]:HN" << hn
+          << "\t(w=" << _hg.nodeWeight(hn) << "," << "deg=" << _hg.nodeDegree(hn)
+          << ") did not find valid contraction partner.";
     }
   }
 
   using Base::_pq;
   using Base::_hg;
-  using Base::_config;
+  using Base::_context;
   using Base::_history;
   Rater _rater;
   ds::FastResetFlagArray<> _outdated_rating;

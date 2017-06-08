@@ -29,11 +29,15 @@
 #include "kahypar/definitions.h"
 #include "kahypar/macros.h"
 #include "kahypar/meta/mandatory.h"
-#include "kahypar/partition/configuration.h"
+#include "kahypar/partition/context.h"
+#include "kahypar/partition/preprocessing/modularity.h"
 #include "kahypar/utils/randomize.h"
+#include "kahypar/utils/stats.h"
+#include "kahypar/utils/timer.h"
+
+static constexpr bool debug = false;
 
 namespace kahypar {
-
 template <class QualityMeasure = Mandatory,
           bool RandomizeNodes = true>
 class Louvain {
@@ -43,19 +47,19 @@ class Louvain {
 
  public:
   Louvain(const Hypergraph& hypergraph,
-          const Configuration& config) :
+          const Context& context) :
     _graph_hierarchy(),
     _random_node_order(),
-    _config(config) {
-    _graph_hierarchy.emplace_back(hypergraph, config);
+    _context(context) {
+    _graph_hierarchy.emplace_back(hypergraph, context);
   }
 
   Louvain(const std::vector<NodeID>& adj_array,
           const std::vector<Edge>& edges,
-          const Configuration& config) :
+          const Context& context) :
     _graph_hierarchy(),
     _random_node_order(),
-    _config(config) {
+    _context(context) {
     _graph_hierarchy.emplace_back(adj_array, edges);
   }
 
@@ -73,22 +77,22 @@ class Louvain {
     int cur_idx = 0;
 
     do {
-      LOG("Graph Number Nodes: " << _graph_hierarchy[cur_idx].numNodes());
-      LOG("Graph Number Edges: " << _graph_hierarchy[cur_idx].numEdges());
+      DBG << "Graph Number Nodes:" << _graph_hierarchy[cur_idx].numNodes();
+      DBG << "Graph Number Edges:" << _graph_hierarchy[cur_idx].numEdges();
       QualityMeasure quality(_graph_hierarchy[cur_idx]);
       if (iteration == 0) {
         cur_quality = quality.quality();
       }
 
       ++iteration;
-      LOG("######## Starting Louvain-Pass #" << iteration << " ########");
+      DBG << "######## Starting Louvain-Pass #" << iteration << "########";
 
-      //Checks if quality of the coarse graph is equal with the quality of next level finer graph
+      // Checks if quality of the coarse graph is equal with the quality of next level finer graph
       ASSERT([&]() {
           if (cur_idx == 0) return true;
           if (std::abs(cur_quality - quality.quality()) > Graph::kEpsilon) {
-            LOGVAR(cur_quality);
-            LOGVAR(quality.quality());
+            LOG << V(cur_quality);
+            LOG << V(quality.quality());
             return false;
           }
           return true;
@@ -99,26 +103,26 @@ class Louvain {
       cur_quality = louvain_pass(_graph_hierarchy[cur_idx], quality);
       HighResClockTimepoint end = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> elapsed_seconds = end - start;
-      LOG("Louvain-Pass #" << iteration << " Time: " << elapsed_seconds.count() << "s");
-      improvement = cur_quality - old_quality > _config.preprocessing.louvain_community_detection.min_eps_improvement;
+      DBG << "Louvain-Pass #" << iteration << "Time:" << elapsed_seconds.count() << "s";
+      improvement = cur_quality - old_quality > _context.preprocessing.community_detection.min_eps_improvement;
 
-      LOG("Louvain-Pass #" << iteration << " improve quality from " << old_quality
-          << " to " << cur_quality);
+      DBG << "Louvain-Pass #" << iteration << "improved quality from" << old_quality
+          << "to" << cur_quality;
 
       if (improvement) {
         cur_quality = quality.quality();
-        LOG("Starting Contraction of communities...");
+        DBG << "Starting Contraction of communities...";
         start = std::chrono::high_resolution_clock::now();
         auto contraction = _graph_hierarchy[cur_idx++].contractClusters();
         end = std::chrono::high_resolution_clock::now();
         elapsed_seconds = end - start;
-        LOG("Contraction Time: " << elapsed_seconds.count() << "s");
+        DBG << "Contraction Time:" << elapsed_seconds.count() << "s";
         _graph_hierarchy.push_back(std::move(contraction.first));
         mapping_stack.push_back(std::move(contraction.second));
-        LOG("Current number of communities: " << _graph_hierarchy[cur_idx].numCommunities());
+        DBG << "Current number of communities:" << _graph_hierarchy[cur_idx].numCommunities();
       }
 
-      LOG("");
+      DBG << "";
     } while (improvement && iteration < max_passes);
 
     ASSERT((mapping_stack.size() + 1) == _graph_hierarchy.size());
@@ -183,7 +187,7 @@ class Louvain {
 
     do {
       ++iterations;
-      LOG("######## Starting Louvain-Pass-Iteration #" << iterations << " ########");
+      DBG << "######## Starting Louvain-Pass-Iteration #" << iterations << "########";
       node_moves = 0;
       for (const NodeID& node : _random_node_order) {
         const ClusterID cur_cid = graph.clusterID(node);
@@ -227,8 +231,8 @@ class Louvain {
               quality.insert(node,best_cid,best_incident_cluster_weight);
               EdgeWeight quality_after = quality.quality();
               if(quality_after - quality_before < -Graph::kEpsilon) {
-                  LOGVAR(quality_before);
-                  LOGVAR(quality_after);
+                  LOG << V(quality_before);
+                  LOG << V(quality_after);
                   return false;
               }
               return true;
@@ -238,9 +242,9 @@ class Louvain {
         }
       }
 
-      LOG("Iteration #" << iterations << ": Moving " << node_moves << " nodes to new communities.");
+      DBG << "Iteration #" << iterations << ": Moving" << node_moves << "nodes to new communities.";
     } while (node_moves > 0 &&
-             iterations < _config.preprocessing.louvain_community_detection.max_pass_iterations);
+             iterations < _context.preprocessing.community_detection.max_pass_iterations);
 
 
     return quality.quality();
@@ -248,6 +252,48 @@ class Louvain {
 
   std::vector<Graph> _graph_hierarchy;
   std::vector<NodeID> _random_node_order;
-  const Configuration& _config;
+  const Context& _context;
 };
+
+namespace internal {
+inline std::vector<ClusterID> detectCommunities(const Hypergraph& hypergraph,
+                                                const Context& context) {
+  const bool verbose_output = (context.type == ContextType::main &&
+                               context.partition.verbose_output) ||
+                              (context.type == ContextType::initial_partitioning &&
+                               context.initial_partitioning.verbose_output);
+  if (verbose_output) {
+    LOG << "Performing community detection:";
+  }
+
+  Louvain<Modularity> louvain(hypergraph, context);
+  HighResClockTimepoint start = std::chrono::high_resolution_clock::now();
+  const EdgeWeight quality = louvain.run();
+  HighResClockTimepoint end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> elapsed_seconds = end - start;
+  Timer::instance().add(context, Timepoint::pre_community_detection,
+                        std::chrono::duration<double>(end - start).count());
+  context.stats.set(StatTag::Preprocessing, "Communities", louvain.numCommunities());
+  context.stats.set(StatTag::Preprocessing, "Modularity", quality);
+
+  if (verbose_output) {
+    LOG << "  # communities =" << louvain.numCommunities();
+    LOG << "  modularity    =" << quality;
+  }
+
+  std::vector<ClusterID> communities(hypergraph.initialNumNodes(), -1);
+  for (const HypernodeID& hn : hypergraph.nodes()) {
+    communities[hn] = louvain.hypernodeClusterID(hn);
+  }
+  ASSERT(std::none_of(communities.cbegin(), communities.cend(),
+                      [](ClusterID i) {
+        return i == -1;
+      }));
+  return communities;
+}
+}  // namespace internal
+
+inline void detectCommunities(Hypergraph& hypergraph, const Context& context) {
+  hypergraph.setCommunities(internal::detectCommunities(hypergraph, context));
+}
 }  // namespace kahypar

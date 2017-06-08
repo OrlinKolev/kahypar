@@ -23,22 +23,20 @@
 #include "kahypar/definitions.h"
 #include "kahypar/partition/metrics.h"
 #include "kahypar/partition/refinement/2way_fm_refiner.h"
-#include "kahypar/partition/refinement/policies/2fm_rebalancing_policy.h"
 #include "kahypar/partition/refinement/policies/fm_stop_policy.h"
 
-using::testing::Test;
-using::testing::Eq;
+using ::testing::Test;
+using ::testing::Eq;
 
 namespace kahypar {
-using TwoWayFMRefinerSimpleStopping = TwoWayFMRefiner<NumberOfFruitlessMovesStopsSearch,
-                                                      GlobalRebalancing>;
+using TwoWayFMRefinerSimpleStopping = TwoWayFMRefiner<NumberOfFruitlessMovesStopsSearch>;
 
 class ATwoWayFMRefiner : public Test {
  public:
   ATwoWayFMRefiner() :
     hypergraph(new Hypergraph(7, 4, HyperedgeIndexVector { 0, 2, 6, 9,  /*sentinel*/ 12 },
                               HyperedgeVector { 0, 2, 0, 1, 3, 4, 3, 4, 6, 2, 5, 6 })),
-    config(),
+    context(),
     refiner(nullptr),
     changes() {
     hypergraph->setNodePart(0, 0);
@@ -49,24 +47,24 @@ class ATwoWayFMRefiner : public Test {
     hypergraph->setNodePart(5, 1);
     hypergraph->setNodePart(6, 1);
     hypergraph->initializeNumCutHyperedges();
-    config.partition.epsilon = 0.15;
-    config.partition.total_graph_weight = 7;
-    config.partition.perfect_balance_part_weights[0] = ceil(config.partition.total_graph_weight /
-                                                            static_cast<double>(config.partition.k));
-    config.partition.perfect_balance_part_weights[1] = ceil(config.partition.total_graph_weight /
-                                                            static_cast<double>(config.partition.k));
+    context.partition.epsilon = 0.15;
+    context.partition.total_graph_weight = 7;
+    context.partition.perfect_balance_part_weights[0] = ceil(context.partition.total_graph_weight /
+                                                             static_cast<double>(context.partition.k));
+    context.partition.perfect_balance_part_weights[1] = ceil(context.partition.total_graph_weight /
+                                                             static_cast<double>(context.partition.k));
 
-    config.partition.max_part_weights[0] = (1 + config.partition.epsilon)
-                                           * config.partition.perfect_balance_part_weights[0];
-    config.partition.max_part_weights[1] = config.partition.max_part_weights[0];
-    config.local_search.fm.max_number_of_fruitless_moves = 50;
-    refiner = std::make_unique<TwoWayFMRefinerSimpleStopping>(*hypergraph, config);
+    context.partition.max_part_weights[0] = (1 + context.partition.epsilon)
+                                            * context.partition.perfect_balance_part_weights[0];
+    context.partition.max_part_weights[1] = context.partition.max_part_weights[0];
+    context.local_search.fm.max_number_of_fruitless_moves = 50;
+    refiner = std::make_unique<TwoWayFMRefinerSimpleStopping>(*hypergraph, context);
     changes.representative.push_back(0);
     changes.contraction_partner.push_back(0);
   }
 
   std::unique_ptr<Hypergraph> hypergraph;
-  Configuration config;
+  Context context;
   std::unique_ptr<TwoWayFMRefinerSimpleStopping> refiner;
   UncontractionGainChanges changes;
 };
@@ -74,11 +72,11 @@ class ATwoWayFMRefiner : public Test {
 class AGainUpdateMethod : public Test {
  public:
   AGainUpdateMethod() :
-    config() {
-    config.local_search.fm.max_number_of_fruitless_moves = 50;
+    context() {
+    context.local_search.fm.max_number_of_fruitless_moves = 50;
   }
 
-  Configuration config;
+  Context context;
 };
 
 using ATwoWayFMRefinerDeathTest = ATwoWayFMRefiner;
@@ -110,13 +108,13 @@ TEST_F(ATwoWayFMRefiner, CalculatesNodeCountsInBothPartitions) {
 TEST_F(ATwoWayFMRefiner, DoesNotViolateTheBalanceConstraint) {
   Metrics old_metrics = { metrics::hyperedgeCut(*hypergraph),
                           metrics::km1(*hypergraph),
-                          metrics::imbalance(*hypergraph, config) };
+                          metrics::imbalance(*hypergraph, context) };
   std::vector<HypernodeID> refinement_nodes = { 1, 6 };
 
   refiner->initialize(100);
   refiner->refine(refinement_nodes, { 42, 42 }, changes, old_metrics);
 
-  EXPECT_PRED_FORMAT2(::testing::DoubleLE, metrics::imbalance(*hypergraph, config),
+  EXPECT_PRED_FORMAT2(::testing::DoubleLE, metrics::imbalance(*hypergraph, context),
                       old_metrics.imbalance);
 }
 
@@ -137,18 +135,18 @@ TEST_F(ATwoWayFMRefiner, UpdatesPartitionWeightsOnRollBack) {
   ASSERT_THAT(refiner->_hg.partWeight(1), Eq(4));
   Metrics old_metrics = { metrics::hyperedgeCut(*hypergraph),
                           metrics::km1(*hypergraph),
-                          metrics::imbalance(*hypergraph, config) };
+                          metrics::imbalance(*hypergraph, context) };
   std::vector<HypernodeID> refinement_nodes = { 1, 6 };
 
   refiner->initialize(100);
   refiner->refine(refinement_nodes, { 42, 42 }, changes, old_metrics);
 
-  ASSERT_THAT(refiner->_hg.partWeight(0), Eq(3));
-  ASSERT_THAT(refiner->_hg.partWeight(1), Eq(4));
+  ASSERT_THAT(refiner->_hg.partWeight(0), Eq(4));
+  ASSERT_THAT(refiner->_hg.partWeight(1), Eq(3));
 }
 
 TEST_F(ATwoWayFMRefiner, PerformsCompleteRollBackIfNoImprovementCouldBeFound) {
-  refiner.reset(new TwoWayFMRefinerSimpleStopping(*hypergraph, config));
+  refiner.reset(new TwoWayFMRefinerSimpleStopping(*hypergraph, context));
   hypergraph->changeNodePart(1, 1, 0);
   ASSERT_THAT(hypergraph->partID(6), Eq(1));
   ASSERT_THAT(hypergraph->partID(2), Eq(1));
@@ -156,7 +154,7 @@ TEST_F(ATwoWayFMRefiner, PerformsCompleteRollBackIfNoImprovementCouldBeFound) {
 
   Metrics old_metrics = { metrics::hyperedgeCut(*hypergraph),
                           metrics::km1(*hypergraph),
-                          metrics::imbalance(*hypergraph, config) };
+                          metrics::imbalance(*hypergraph, context) };
   std::vector<HypernodeID> refinement_nodes = { 1, 6 };
 
   refiner->refine(refinement_nodes, { 42, 42 }, changes, old_metrics);
@@ -168,7 +166,7 @@ TEST_F(ATwoWayFMRefiner, PerformsCompleteRollBackIfNoImprovementCouldBeFound) {
 TEST_F(ATwoWayFMRefiner, RollsBackAllNodeMovementsIfCutCouldNotBeImproved) {
   Metrics old_metrics = { metrics::hyperedgeCut(*hypergraph),
                           metrics::km1(*hypergraph),
-                          metrics::imbalance(*hypergraph, config) };
+                          metrics::imbalance(*hypergraph, context) };
   std::vector<HypernodeID> refinement_nodes = { 1, 6 };
 
   refiner->initialize(100);
@@ -186,16 +184,12 @@ TEST_F(AGainUpdateMethod, RespectsPositiveGainUpdateSpecialCaseForHyperedgesOfSi
   hypergraph.setNodePart(1, 0);
   hypergraph.initializeNumCutHyperedges();
 
-  TwoWayFMRefinerSimpleStopping refiner(hypergraph, config);
+  TwoWayFMRefinerSimpleStopping refiner(hypergraph, context);
   refiner.initialize(100);
 
   // bypassing activate since neither 0 nor 1 is actually a border node
   refiner._hg.activate(0);
   refiner._hg.activate(1);
-  refiner._rebalance_pqs[1].remove(0);
-  refiner._disabled_rebalance_hns.add(0);
-  refiner._rebalance_pqs[1].remove(1);
-  refiner._disabled_rebalance_hns.add(1);
   refiner._gain_cache.setValue(0, refiner.computeGain(0));
   refiner._gain_cache.setValue(1, refiner.computeGain(1));
   refiner._pq.insert(0, 1, refiner._gain_cache.value(0));
@@ -221,7 +215,7 @@ TEST_F(AGainUpdateMethod, RespectsNegativeGainUpdateSpecialCaseForHyperedgesOfSi
   hypergraph.setNodePart(2, 1);
   hypergraph.initializeNumCutHyperedges();
 
-  TwoWayFMRefinerSimpleStopping refiner(hypergraph, config);
+  TwoWayFMRefinerSimpleStopping refiner(hypergraph, context);
   refiner.initialize(100);
 
   refiner.activate(0,  /* dummy max-part-weight */ { 42, 42 });
@@ -246,7 +240,7 @@ TEST_F(AGainUpdateMethod, HandlesCase0To1) {
   hypergraph.setNodePart(3, 0);
   hypergraph.initializeNumCutHyperedges();
 
-  TwoWayFMRefinerSimpleStopping refiner(hypergraph, config);
+  TwoWayFMRefinerSimpleStopping refiner(hypergraph, context);
   refiner.initialize(100);
 
   // bypassing activate since neither 0 nor 1 is actually a border node
@@ -254,14 +248,6 @@ TEST_F(AGainUpdateMethod, HandlesCase0To1) {
   refiner._hg.activate(1);
   refiner._hg.activate(2);
   refiner._hg.activate(3);
-  refiner._rebalance_pqs[1].remove(0);
-  refiner._disabled_rebalance_hns.add(0);
-  refiner._rebalance_pqs[1].remove(1);
-  refiner._disabled_rebalance_hns.add(1);
-  refiner._rebalance_pqs[1].remove(2);
-  refiner._disabled_rebalance_hns.add(2);
-  refiner._rebalance_pqs[1].remove(3);
-  refiner._disabled_rebalance_hns.add(3);
   refiner._gain_cache.setValue(0, refiner.computeGain(0));
   refiner._gain_cache.setValue(1, refiner.computeGain(1));
   refiner._gain_cache.setValue(2, refiner.computeGain(2));
@@ -295,7 +281,7 @@ TEST_F(AGainUpdateMethod, HandlesCase1To0) {
   hypergraph.setNodePart(4, 1);
   hypergraph.initializeNumCutHyperedges();
 
-  TwoWayFMRefinerSimpleStopping refiner(hypergraph, config);
+  TwoWayFMRefinerSimpleStopping refiner(hypergraph, context);
   refiner.initialize(100);
 
   // bypassing activate since neither 0 nor 1 is actually a border node
@@ -332,7 +318,7 @@ TEST_F(AGainUpdateMethod, HandlesCase2To1) {
   hypergraph.setNodePart(3, 1);
   hypergraph.initializeNumCutHyperedges();
 
-  TwoWayFMRefinerSimpleStopping refiner(hypergraph, config);
+  TwoWayFMRefinerSimpleStopping refiner(hypergraph, context);
   refiner.initialize(100);
 
   refiner.activate(0,  /* dummy max-part-weight */ { 42, 42 });
@@ -361,7 +347,7 @@ TEST_F(AGainUpdateMethod, HandlesCase1To2) {
   hypergraph.setNodePart(3, 1);
   hypergraph.initializeNumCutHyperedges();
 
-  TwoWayFMRefinerSimpleStopping refiner(hypergraph, config);
+  TwoWayFMRefinerSimpleStopping refiner(hypergraph, context);
   refiner.initialize(100);
 
   refiner.activate(0,  /* dummy max-part-weight */ { 42, 42 });
@@ -389,7 +375,7 @@ TEST_F(AGainUpdateMethod, HandlesSpecialCaseOfHyperedgeWith3Pins) {
   hypergraph.setNodePart(2, 1);
   hypergraph.initializeNumCutHyperedges();
 
-  TwoWayFMRefinerSimpleStopping refiner(hypergraph, config);
+  TwoWayFMRefinerSimpleStopping refiner(hypergraph, context);
   refiner.initialize(100);
 
   refiner.activate(0,  /* dummy max-part-weight */ { 42, 42 });
@@ -414,7 +400,7 @@ TEST_F(AGainUpdateMethod, RemovesNonBorderNodesFromPQ) {
   hypergraph.setNodePart(2, 0);
   hypergraph.initializeNumCutHyperedges();
 
-  TwoWayFMRefinerSimpleStopping refiner(hypergraph, config);
+  TwoWayFMRefinerSimpleStopping refiner(hypergraph, context);
   refiner.initialize(100);
 
   refiner.activate(0,  /* dummy max-part-weight */ { 42, 42 });
@@ -440,7 +426,7 @@ TEST_F(AGainUpdateMethod, ActivatesUnmarkedNeighbors) {
   hypergraph.setNodePart(2, 0);
   hypergraph.initializeNumCutHyperedges();
 
-  TwoWayFMRefinerSimpleStopping refiner(hypergraph, config);
+  TwoWayFMRefinerSimpleStopping refiner(hypergraph, context);
   refiner.initialize(100);
 
   // bypassing activate since neither 0 nor 1 is actually a border node
@@ -450,10 +436,6 @@ TEST_F(AGainUpdateMethod, ActivatesUnmarkedNeighbors) {
   refiner._pq.insert(1, 1, refiner._gain_cache.value(1));
   refiner._hg.activate(0);
   refiner._hg.activate(1);
-  refiner._rebalance_pqs[1].remove(0);
-  refiner._disabled_rebalance_hns.add(0);
-  refiner._rebalance_pqs[1].remove(1);
-  refiner._disabled_rebalance_hns.add(1);
   refiner._pq.enablePart(1);
   ASSERT_THAT(refiner._pq.key(0, 1), Eq(-1));
   ASSERT_THAT(refiner._pq.key(1, 1), Eq(-1));
@@ -479,15 +461,13 @@ TEST_F(AGainUpdateMethod, DoesNotDeleteJustActivatedNodes) {
   hypergraph.setNodePart(4, 0);
   hypergraph.initializeNumCutHyperedges();
 
-  TwoWayFMRefinerSimpleStopping refiner(hypergraph, config);
+  TwoWayFMRefinerSimpleStopping refiner(hypergraph, context);
   refiner.initialize(100);
 
   // bypassing activate
   refiner._pq.insert(2, 1, refiner.computeGain(2));
   refiner._gain_cache.setValue(2, refiner.computeGain(2));
   refiner._hg.activate(2);
-  refiner._rebalance_pqs[1].remove(2);
-  refiner._disabled_rebalance_hns.add(2);
   refiner._pq.enablePart(1);
   refiner.moveHypernode(2, 0, 1);
   refiner._hg.mark(2);
@@ -506,18 +486,18 @@ TEST(ARefiner, ChecksIfMovePreservesBalanceConstraint) {
   hypergraph.setNodePart(3, 1);
   hypergraph.initializeNumCutHyperedges();
 
-  Configuration config;
-  config.partition.epsilon = 0.02;
-  config.partition.perfect_balance_part_weights[0] = ceil(hypergraph.initialNumNodes() /
-                                                          static_cast<double>(config.partition.k));
-  config.partition.perfect_balance_part_weights[1] = ceil(hypergraph.initialNumNodes() /
-                                                          static_cast<double>(config.partition.k));
+  Context context;
+  context.partition.epsilon = 0.02;
+  context.partition.perfect_balance_part_weights[0] = ceil(hypergraph.initialNumNodes() /
+                                                           static_cast<double>(context.partition.k));
+  context.partition.perfect_balance_part_weights[1] = ceil(hypergraph.initialNumNodes() /
+                                                           static_cast<double>(context.partition.k));
 
-  config.partition.max_part_weights[0] = (1 + config.partition.epsilon)
-                                         * config.partition.perfect_balance_part_weights[0];
-  config.partition.max_part_weights[1] = config.partition.max_part_weights[0];
+  context.partition.max_part_weights[0] = (1 + context.partition.epsilon)
+                                          * context.partition.perfect_balance_part_weights[0];
+  context.partition.max_part_weights[1] = context.partition.max_part_weights[0];
 
-  TwoWayFMRefinerSimpleStopping refiner(hypergraph, config);
+  TwoWayFMRefinerSimpleStopping refiner(hypergraph, context);
   refiner.initialize(100);
   ASSERT_THAT(refiner.moveIsFeasible(1, 0, 1), Eq(true));
   ASSERT_THAT(refiner.moveIsFeasible(3, 1, 0), Eq(false));
@@ -527,26 +507,26 @@ TEST_F(ATwoWayFMRefinerDeathTest, ConsidersSingleNodeHEsDuringInitialGainComputa
   hypergraph.reset(new Hypergraph(2, 2, HyperedgeIndexVector { 0, 2,  /*sentinel*/ 3 },
                                   HyperedgeVector { 0, 1, 0 }, 2));
 
-  config.local_search.fm.max_number_of_fruitless_moves = 50;
-  config.partition.total_graph_weight = 2;
-  config.partition.k = 2;
-  config.partition.rb_lower_k = 0;
-  config.partition.rb_upper_k = config.partition.k - 1;
-  config.partition.epsilon = 1.0;
-  config.partition.perfect_balance_part_weights[0] = ceil(config.partition.total_graph_weight /
-                                                          static_cast<double>(config.partition.k));
-  config.partition.perfect_balance_part_weights[1] = ceil(config.partition.total_graph_weight /
-                                                          static_cast<double>(config.partition.k));
+  context.local_search.fm.max_number_of_fruitless_moves = 50;
+  context.partition.total_graph_weight = 2;
+  context.partition.k = 2;
+  context.partition.rb_lower_k = 0;
+  context.partition.rb_upper_k = context.partition.k - 1;
+  context.partition.epsilon = 1.0;
+  context.partition.perfect_balance_part_weights[0] = ceil(context.partition.total_graph_weight /
+                                                           static_cast<double>(context.partition.k));
+  context.partition.perfect_balance_part_weights[1] = ceil(context.partition.total_graph_weight /
+                                                           static_cast<double>(context.partition.k));
 
-  config.partition.max_part_weights[0] = (1 + config.partition.epsilon)
-                                         * config.partition.perfect_balance_part_weights[0];
-  config.partition.max_part_weights[1] = config.partition.max_part_weights[0];
+  context.partition.max_part_weights[0] = (1 + context.partition.epsilon)
+                                          * context.partition.perfect_balance_part_weights[0];
+  context.partition.max_part_weights[1] = context.partition.max_part_weights[0];
 
   hypergraph->setNodePart(0, 0);
   hypergraph->setNodePart(1, 1);
   hypergraph->initializeNumCutHyperedges();
 
-  refiner.reset(new TwoWayFMRefinerSimpleStopping(*hypergraph, config));
+  refiner.reset(new TwoWayFMRefinerSimpleStopping(*hypergraph, context));
   ASSERT_DEBUG_DEATH(refiner->initialize(100), ".*");
   ASSERT_DEBUG_DEATH(refiner->computeGain(0), ".*");
 }
@@ -559,12 +539,10 @@ TEST_F(ATwoWayFMRefiner, KnowsIfAHyperedgeIsFullyActive) {
   hypergraph->setNodePart(2, 0);
   hypergraph->initializeNumCutHyperedges();
 
-  refiner.reset(new TwoWayFMRefinerSimpleStopping(*hypergraph, config));
+  refiner.reset(new TwoWayFMRefinerSimpleStopping(*hypergraph, context));
   refiner->initialize(100);
 
   refiner->_hg.activate(0);
-  refiner->_rebalance_pqs[1].remove(0);
-  refiner->_disabled_rebalance_hns.add(0);
   hypergraph->changeNodePart(0, 0, 1);
   refiner->_hg.mark(0);
   refiner->fullUpdate(0, 1, 0);

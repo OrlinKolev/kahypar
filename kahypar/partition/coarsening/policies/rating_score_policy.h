@@ -1,7 +1,7 @@
 /*******************************************************************************
  * This file is part of KaHyPar.
  *
- * Copyright (C) 2016 Sebastian Schlag <sebastian.schlag@kit.edu>
+ * Copyright (C) 2017 Sebastian Schlag <sebastian.schlag@kit.edu>
  *
  * KaHyPar is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,29 +16,29 @@
  * You should have received a copy of the GNU General Public License
  * along with KaHyPar.  If not, see <http://www.gnu.org/licenses/>.
  *
- ******************************************************************************/
+******************************************************************************/
 
 #pragma once
 
+#include "kahypar/definitions.h"
 #include "kahypar/meta/policy_registry.h"
 #include "kahypar/meta/typelist.h"
 
 namespace kahypar {
-struct RebalancingPolicy : meta::PolicyBase {
- protected:
-  RebalancingPolicy() = default;
+class HeavyEdgeScore final : public meta::PolicyBase {
+ public:
+  KAHYPAR_ATTRIBUTE_ALWAYS_INLINE static inline RatingType score(const Hypergraph& hypergraph, const HyperedgeID he) {
+    return static_cast<RatingType>(hypergraph.edgeWeight(he)) / (hypergraph.edgeSize(he) - 1);
+  }
 };
 
-struct GlobalRebalancing : public RebalancingPolicy,
-                           private std::true_type {
-  using std::true_type::operator value_type;
+class EdgeFrequencyScore final : public meta::PolicyBase {
+ public:
+  // TODO(andre): implement edge frequency rating here
+  KAHYPAR_ATTRIBUTE_ALWAYS_INLINE static inline RatingType score(const Hypergraph& hypergraph, const HyperedgeID he) {
+    return 1;
+  }
 };
 
-struct NoGlobalRebalancing : public RebalancingPolicy,
-                             private std::false_type {
-  using std::false_type::operator value_type;
-};
-
-using RebalancingPolicyClasses = meta::Typelist<GlobalRebalancing,
-                                                NoGlobalRebalancing>;
+using RatingScorePolicies = meta::Typelist<HeavyEdgeScore, EdgeFrequencyScore>;
 }  // namespace kahypar

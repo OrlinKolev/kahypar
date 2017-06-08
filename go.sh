@@ -26,10 +26,10 @@ action='run'
 
 # this is used on 'run' and 'commit'
 # set to refiner currently in development
-default_refiner='twoway_soft_gain'
+default_refiner='twoway_fm'
 
 # this is used on 'eval' and 'commit'
-baseline_refiners='twoway_fm twoway_netstatus'
+baseline_refiners=''
 
 build=true
 
@@ -148,7 +148,8 @@ do
     file="$KAHYPAR_TEST_DATA_DIR/$graph"
     if [ "$action" == 'run' ]
     then
-        "$executable" "${args[@]}" --seed "$seed" -p "$ini" -k "$k" -h "$file" --r-type "$refiner"
+        "$executable" "${args[@]}" --seed "$seed" -p "$ini" -k "$k" -h "$file" --r-type "$refiner" \
+          || exit 1
     elif [ "$action" == 'print' ]
     then
         echo "$executable"

@@ -36,7 +36,7 @@
 
 #include "kahypar/datastructure/sparse_map.h"
 #include "kahypar/definitions.h"
-#include "kahypar/partition/configuration.h"
+#include "kahypar/partition/context.h"
 #include "kahypar/utils/randomize.h"
 
 namespace kahypar {
@@ -44,8 +44,6 @@ namespace ds {
 struct Edge {
   NodeID target_node = 0;
   EdgeWeight weight = 0.0;
-  size_t bfs_cnt = 0;
-  Edge* reverse_edge = nullptr;
 };
 
 struct IncidentClusterWeight {
@@ -98,10 +96,8 @@ class Graph {
   using EdgeIterator = std::vector<Edge>::const_iterator;
   using IncidentClusterWeightIterator = std::vector<IncidentClusterWeight>::const_iterator;
 
-  Graph(const Hypergraph& hypergraph, const Configuration& config) :
-    _num_nodes(hypergraph.currentNumNodes() +
-               (config.preprocessing.louvain_community_detection.use_bipartite_graph ?
-                hypergraph.currentNumEdges() : 0)),
+  Graph(const Hypergraph& hypergraph, const Context& context) :
+    _num_nodes(hypergraph.currentNumNodes() + hypergraph.currentNumEdges()),
     _num_communities(_num_nodes),
     _total_weight(0.0L),
     _adj_array(_num_nodes + 1),
@@ -114,52 +110,39 @@ class Graph {
     _incident_cluster_weight_position(_num_nodes),
     _hypernode_mapping(hypergraph.initialNumNodes() + hypergraph.initialNumEdges(), kInvalidNode) {
     std::iota(_cluster_id.begin(), _cluster_id.end(), 0);
-    if (config.preprocessing.louvain_community_detection.use_bipartite_graph) {
-      const auto degreeWeight = [&](const Hypergraph& hg,
+    switch (context.preprocessing.community_detection.edge_weight) {
+      case LouvainEdgeWeight::degree:
+        constructBipartiteGraph(hypergraph, [&](const Hypergraph& hg,
+                                                const HyperedgeID he,
+                                                const HypernodeID hn) {
+            return (static_cast<EdgeWeight>(hg.edgeWeight(he)) *
+                    static_cast<EdgeWeight>(hg.nodeDegree(hn))) /
+            static_cast<EdgeWeight>(hg.edgeSize(he));
+          });
+        break;
+      case LouvainEdgeWeight::non_uniform:
+        constructBipartiteGraph(hypergraph,
+                                [&](const Hypergraph& hg,
                                     const HyperedgeID he,
-                                    const HypernodeID hn) {
-                                  return (static_cast<EdgeWeight>(hg.edgeWeight(he)) *
-                                          static_cast<EdgeWeight>(hg.nodeDegree(hn))) /
-                                         static_cast<EdgeWeight>(hg.edgeSize(he));
-                                };
-      const auto uniformWeight = [&](const Hypergraph& hg,
-                                     const HyperedgeID he,
-                                     const HypernodeID) {
-                                   return static_cast<EdgeWeight>(hg.edgeWeight(he));
-                                 };
+                                    const HypernodeID) {
+            return static_cast<EdgeWeight>(hg.edgeWeight(he)) /
+            static_cast<EdgeWeight>(hg.edgeSize(he));
+          });
 
-      switch (config.preprocessing.louvain_community_detection.edge_weight) {
-        case LouvainEdgeWeight::degree:
-          constructBipartiteGraph(hypergraph, degreeWeight);
-          break;
-        case LouvainEdgeWeight::non_uniform:
-          constructBipartiteGraph(hypergraph,
-                                  [&](const Hypergraph& hg,
-                                      const HyperedgeID he,
-                                      const HypernodeID) {
-              return static_cast<EdgeWeight>(hg.edgeWeight(he)) /
-              static_cast<EdgeWeight>(hg.edgeSize(he));
-            });
-
-          break;
-        case LouvainEdgeWeight::uniform:
-          constructBipartiteGraph(hypergraph, uniformWeight);
-          break;
-        case LouvainEdgeWeight::hybrid:
-          {
-            const double density = static_cast<double>(hypergraph.initialNumEdges()) /
-                                   static_cast<double>(hypergraph.initialNumNodes());
-            if (density < 0.75) {
-              constructBipartiteGraph(hypergraph, degreeWeight);
-            } else {
-              constructBipartiteGraph(hypergraph, uniformWeight);
-            }
-            break;
-          }
-        default:
-          LOG("Unknown edge weight for bipartite graph.");
-          std::exit(-1);
-      }
+        break;
+      case LouvainEdgeWeight::uniform:
+        constructBipartiteGraph(hypergraph, [&](const Hypergraph& hg,
+                                                const HyperedgeID he,
+                                                const HypernodeID) {
+            return static_cast<EdgeWeight>(hg.edgeWeight(he));
+          });
+        break;
+      case LouvainEdgeWeight::hybrid:
+        LOG << "Only uniform/non-uniform/degree edge weight is allowed at graph construction.";
+        std::exit(-1);
+      default:
+        LOG << "Unknown edge weight for bipartite graph.";
+        std::exit(-1);
     }
   }
 
@@ -203,7 +186,7 @@ class Graph {
   }
 
   std::pair<EdgeIterator, EdgeIterator> incidentEdges(const NodeID node) const {
-    ASSERT(node < numNodes(), "NodeID " << node << " doesn't exist!");
+    ASSERT(node < numNodes(), "NodeID" << node << "doesn't exist!");
     return std::make_pair(_edges.cbegin() + _adj_array[node],
                           _edges.cbegin() + _adj_array[static_cast<size_t>(node) + 1]);
   }
@@ -217,17 +200,17 @@ class Graph {
   }
 
   size_t degree(const NodeID node) const {
-    ASSERT(node < numNodes(), "NodeID " << node << " doesn't exist!");
+    ASSERT(node < numNodes(), "NodeID" << node << "doesn't exist!");
     return static_cast<size_t>(_adj_array[static_cast<size_t>(node) + 1] - _adj_array[node]);
   }
 
   EdgeWeight weightedDegree(const NodeID node) const {
-    ASSERT(node < numNodes(), "NodeID " << node << " doesn't exist!");
+    ASSERT(node < numNodes(), "NodeID" << node << "doesn't exist!");
     return _weighted_degree[node];
   }
 
   EdgeWeight selfloopWeight(const NodeID node) const {
-    ASSERT(node < numNodes(), "NodeID " << node << " doesn't exist!");
+    ASSERT(node < numNodes(), "NodeID" << node << "doesn't exist!");
     return _selfloop_weight[node];
   }
 
@@ -295,16 +278,16 @@ class Graph {
             }
           }
           if (distinct_comm.size() != _num_communities) {
-            LOGVAR(_num_communities);
-            LOGVAR(distinct_comm.size());
+            LOG << V(_num_communities);
+            LOG << V(distinct_comm.size());
             return false;
           } else if (to != -1 && to_size != _cluster_size[to]) {
-            LOGVAR(to_size);
-            LOGVAR(_cluster_size[to]);
+            LOG << V(to_size);
+            LOG << V(_cluster_size[to]);
             return false;
           } else if (from != -1 && from_size != _cluster_size[from]) {
-            LOGVAR(from_size);
-            LOGVAR(_cluster_size[from]);
+            LOG << V(from_size);
+            LOG << V(_cluster_size[from]);
             return false;
           }
           return true;
@@ -362,8 +345,8 @@ class Graph {
             const ClusterID cid = cluster.clusterID;
             const EdgeWeight weight = cluster.weight;
             if (incident_cluster.find(cid) == incident_cluster.end()) {
-              LOG("ClusterID " << cid << " occurs multiple times or is not incident to node "
-                  << node);
+              LOG << "ClusterID" << cid << "occurs multiple times or is not incident to node"
+                  << node;
               return false;
             }
             EdgeWeight incident_weight = 0.0L;
@@ -374,23 +357,23 @@ class Graph {
               }
             }
             if (std::abs(incident_weight - weight) > kEpsilon) {
-              LOG("Weight calculation of incident cluster " << cid << " failed!");
-              LOGVAR(incident_weight);
-              LOGVAR(weight);
+              LOG << "Weight calculation of incident cluster" << cid << "failed!";
+              LOG << V(incident_weight);
+              LOG << V(weight);
               return false;
             }
             incident_cluster.erase(cid);
           }
 
           if (incident_cluster.size() > 0) {
-            LOG("Missing cluster ids in iterator!");
+            LOG << "Missing cluster ids in iterator!";
             for (const ClusterID& cid : incident_cluster) {
-              LOGVAR(cid);
+              LOG << V(cid);
             }
             return false;
           }
           return true;
-        } (), "Incident cluster weight calculation of node " << node << " failed!");
+        } (), "Incident cluster weight calculation of node" << node << "failed!");
 
     return std::make_pair(_incident_cluster_weight.begin(), _incident_cluster_weight.begin() + idx);
   }
@@ -430,8 +413,8 @@ class Graph {
             if (_hypernode_mapping[hn] != kInvalidNode &&
                 static_cast<NodeID>(clusterID(_hypernode_mapping[hn])) !=
                 new_hypernode_mapping[hn]) {
-              LOGVAR(clusterID(_hypernode_mapping[hn]));
-              LOGVAR(new_hypernode_mapping[hn]);
+              LOG << V(clusterID(_hypernode_mapping[hn]));
+              LOG << V(new_hypernode_mapping[hn]);
               return false;
             }
           }
@@ -449,7 +432,7 @@ class Graph {
           return _cluster_id[n1] < _cluster_id[n2] || (_cluster_id[n1] == _cluster_id[n2] && n1 < n2);
         });
 
-    //Add Sentinels
+    // Add Sentinels
     node_ids.push_back(_cluster_id.size());
     _cluster_id.push_back(new_cid);
 
@@ -472,7 +455,7 @@ class Graph {
       }
     }
 
-    //Remove Sentinels
+    // Remove Sentinels
     node_ids.pop_back();
     _cluster_id.pop_back();
 
@@ -483,11 +466,11 @@ class Graph {
   }
 
   void printGraph() {
-    std::cout << "Number Nodes: " << numNodes() << std::endl;
-    std::cout << "Number Edges: " << numEdges() << std::endl;
+    std::cout << "Number Nodes:" << numNodes() << std::endl;
+    std::cout << "Number Edges:" << numEdges() << std::endl;
 
     for (const NodeID& n : nodes()) {
-      std::cout << "Node ID: " << n << "(Comm.: " << clusterID(n) << "), Adj. List: ";
+      std::cout << "Node ID:" << n << "(Comm.:" << clusterID(n) << "), Adj. List: ";
       for (const Edge& e : incidentEdges(n)) {
         std::cout << "(" << e.target_node << ",w=" << e.weight << ") ";
       }
@@ -575,7 +558,7 @@ class Graph {
             const ClusterID cid = cluster.clusterID;
             const EdgeWeight weight = cluster.weight;
             if (incident_cluster.find(cid) == incident_cluster.end()) {
-              LOG("ClusterID " << cid << " occurs multiple times or is not incident to cluster!");
+              LOG << "ClusterID" << cid << "occurs multiple times or is not incident to cluster!";
               return false;
             }
             EdgeWeight incident_weight = 0.0L;
@@ -588,18 +571,18 @@ class Graph {
               }
             }
             if (std::abs(incident_weight - weight) > kEpsilon) {
-              LOG("Weight calculation of incident cluster " << cid << " failed!");
-              LOGVAR(incident_weight);
-              LOGVAR(weight);
+              LOG << "Weight calculation of incident cluster" << cid << "failed!";
+              LOG << V(incident_weight);
+              LOG << V(weight);
               return false;
             }
             incident_cluster.erase(cid);
           }
 
           if (incident_cluster.size() > 0) {
-            LOG("Missing cluster ids in iterator!");
+            LOG << "Missing cluster ids in iterator!";
             for (const ClusterID& cid : incident_cluster) {
-              LOGVAR(cid);
+              LOG << V(cid);
             }
             return false;
           }
@@ -660,24 +643,16 @@ class Graph {
         _total_weight += e.weight;
         _weighted_degree[cur_node] += e.weight;
         _edges[_adj_array[cur_node] + pos++] = e;
-        for (size_t i = _adj_array[e.target_node];
-             i < _adj_array[static_cast<size_t>(e.target_node) + 1]; ++i) {
-          if (_edges[i].target_node == cur_node) {
-            _edges[i].reverse_edge = &_edges[_adj_array[cur_node] + pos - 1];
-            _edges[_adj_array[cur_node] + pos - 1].reverse_edge = &_edges[i];
-            break;
-          }
-        }
       }
     }
 
 
     ASSERT([&]() {
-          //Check Hypernodes in Graph
+          // Check Hypernodes in Graph
           for (const HypernodeID& hn : hg.nodes()) {
             if (hg.nodeDegree(hn) != degree(_hypernode_mapping[hn])) {
-              LOGVAR(hg.nodeDegree(hn));
-              LOGVAR(degree(_hypernode_mapping[hn]));
+              LOG << V(hg.nodeDegree(hn));
+              LOG << V(degree(_hypernode_mapping[hn]));
               return false;
             }
             std::set<HyperedgeID> incident_edges;
@@ -687,18 +662,18 @@ class Graph {
             for (const Edge& e : incidentEdges(_hypernode_mapping[hn])) {
               const HyperedgeID he = e.target_node;
               if (incident_edges.find(he) == incident_edges.end()) {
-                LOGVAR(_hypernode_mapping[hn]);
-                LOGVAR(he);
+                LOG << V(_hypernode_mapping[hn]);
+                LOG << V(he);
                 return false;
               }
             }
           }
 
-          //Checks Hyperedges in Graph
+          // Checks Hyperedges in Graph
           for (const HyperedgeID& he : hg.edges()) {
             if (hg.edgeSize(he) != degree(_hypernode_mapping[he + num_nodes])) {
-              LOGVAR(hg.edgeSize(he));
-              LOGVAR(degree(_hypernode_mapping[he + num_nodes]));
+              LOG << V(hg.edgeSize(he));
+              LOG << V(degree(_hypernode_mapping[he + num_nodes]));
               return false;
             }
             std::set<HypernodeID> pins;
@@ -707,8 +682,8 @@ class Graph {
             }
             for (const Edge& e : incidentEdges(_hypernode_mapping[he + num_nodes])) {
               if (pins.find(e.target_node) == pins.end()) {
-                LOGVAR(_hypernode_mapping[he + num_nodes]);
-                LOGVAR(e.target_node);
+                LOG << V(_hypernode_mapping[he + num_nodes]);
+                LOG << V(e.target_node);
                 return false;
               }
             }

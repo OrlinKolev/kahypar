@@ -110,7 +110,7 @@ class TwoWayFMGainCache {
   KAHYPAR_ATTRIBUTE_ALWAYS_INLINE void uncheckedSetDelta(const size_t index, const T value) {
     ASSERT(index < _size);
     ASSERT(_cache[index].delta != 0,
-           "Index " << index << " is still unused and not tracked for reset!");
+           "Index" << index << "is still unused and not tracked for reset!");
     _cache[index].delta = value;
   }
 
@@ -123,14 +123,10 @@ class TwoWayFMGainCache {
     _cache[index].delta -= delta;
   }
 
-  template <typename use_pqs, class PQ, class Hypergraph>
-  void rollbackDelta(PQ& rb_pq, Hypergraph& hg) {
+  void rollbackDelta() {
     for (auto rit = _used_delta_entries.crbegin(); rit != _used_delta_entries.crend(); ++rit) {
       if (_cache[*rit].value != kNotCached) {
         _cache[*rit].value += _cache[*rit].delta;
-      }
-      if (use_pqs()) {
-        rb_pq[1 - hg.partID(*rit)].updateKeyBy(*rit, _cache[*rit].delta);
       }
       _cache[*rit].delta = 0;
     }

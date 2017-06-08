@@ -31,8 +31,8 @@
 #include "kahypar/definitions.h"
 #include "kahypar/meta/int_to_type.h"
 #include "kahypar/partition/coarsening/coarsener_base.h"
-#include "kahypar/partition/coarsening/heavy_edge_rater.h"
-#include "kahypar/partition/configuration.h"
+#include "kahypar/partition/coarsening/vertex_pair_rater.h"
+#include "kahypar/partition/context.h"
 #include "kahypar/partition/metrics.h"
 #include "kahypar/partition/refinement/i_refiner.h"
 #include "kahypar/utils/randomize.h"
@@ -40,15 +40,18 @@
 namespace kahypar {
 template <class PrioQueue = ds::BinaryMaxHeap<HypernodeID, RatingType> >
 class VertexPairCoarsenerBase : public CoarsenerBase {
+ private:
+  static constexpr bool debug = false;
+
  protected:
   using CoarsenerBase::performLocalSearch;
   using CoarsenerBase::initializeRefiner;
   using CoarsenerBase::performContraction;
 
  public:
-  VertexPairCoarsenerBase(Hypergraph& hypergraph, const Configuration& config,
+  VertexPairCoarsenerBase(Hypergraph& hypergraph, const Context& context,
                           const HypernodeWeight weight_of_heaviest_node) :
-    CoarsenerBase(hypergraph, config, weight_of_heaviest_node),
+    CoarsenerBase(hypergraph, context, weight_of_heaviest_node),
     _pq(_hg.initialNumNodes()) { }
 
   ~VertexPairCoarsenerBase() override = default;
@@ -65,37 +68,24 @@ class VertexPairCoarsenerBase : public CoarsenerBase {
   bool doUncoarsen(IRefiner& refiner) {
     Metrics current_metrics = { metrics::hyperedgeCut(_hg),
                                 metrics::km1(_hg),
-                                metrics::imbalance(_hg, _config) };
+                                metrics::imbalance(_hg, _context) };
     HyperedgeWeight initial_objective = std::numeric_limits<HyperedgeWeight>::min();
 
-    switch (_config.partition.objective) {
+    switch (_context.partition.objective) {
       case Objective::cut:
         initial_objective = current_metrics.cut;
-        Stats::instance().add(_config, "initialCut", initial_objective);
-        if (_config.partition.verbose_output) {
-          LOG("initial cut =" << initial_objective);
-        }
+        _context.stats.set(StatTag::InitialPartitioning, "inititalCut", initial_objective);
         break;
       case Objective::km1:
         initial_objective = current_metrics.km1;
-        Stats::instance().add(_config, "initialKm1", initial_objective);
-        if (_config.partition.verbose_output) {
-          LOG("initial km1 =" << initial_objective);
-        }
+        _context.stats.set(StatTag::InitialPartitioning, "inititalKm1", initial_objective);
         break;
       default:
-        LOG("Unknown Objective");
+        LOG << "Unknown Objective";
         exit(-1);
     }
 
-    Stats::instance().add(_config, "initialImbalance", current_metrics.imbalance);
-    if (_config.partition.verbose_output) {
-      LOG("initial imbalance=" << current_metrics.imbalance);
-      LOG("target  weights (RB): w(0)=" << _config.partition.max_part_weights[0]
-          << " w(1)=" << _config.partition.max_part_weights[1]);
-      LOG("initial weights (RB): w(0)=" << _hg.partWeight(0) << " w(1)=" << _hg.partWeight(1));
-    }
-
+    _context.stats.set(StatTag::InitialPartitioning, "initialImbalance", current_metrics.imbalance);
 
     initializeRefiner(refiner);
     std::vector<HypernodeID> refinement_nodes(2, 0);
@@ -106,8 +96,8 @@ class VertexPairCoarsenerBase : public CoarsenerBase {
       restoreParallelHyperedges();
       restoreSingleNodeHyperedges();
 
-      DBG(dbg_coarsening_uncoarsen, "Uncontracting: (" << _history.back().contraction_memento.u << ","
-          << _history.back().contraction_memento.v << ")");
+      DBG << "Uncontracting: (" << _history.back().contraction_memento.u << ","
+          << _history.back().contraction_memento.v << ")";
 
       refinement_nodes.clear();
       refinement_nodes.push_back(_history.back().contraction_memento.u);
@@ -117,7 +107,7 @@ class VertexPairCoarsenerBase : public CoarsenerBase {
         _max_hn_weights.pop_back();
       }
 
-      if (_config.local_search.algorithm == RefinementAlgorithm::twoway_fm) {
+      if (_context.local_search.algorithm == RefinementAlgorithm::twoway_fm) {
         _hg.uncontract(_history.back().contraction_memento, changes,
                        meta::Int2Type<static_cast<int>(RefinementAlgorithm::twoway_fm)>());
       } else {
@@ -133,24 +123,19 @@ class VertexPairCoarsenerBase : public CoarsenerBase {
     // This currently cannot be guaranteed for RB-partitioning and k != 2^x, since it might be
     // possible that 2FM cannot re-adjust the part weights to be less than Lmax0 and Lmax1.
     // In order to guarantee this, 2FM would have to force rebalancing by sacrificing cut-edges.
-    // ASSERT(current_imbalance <= _config.partition.epsilon,
-    //        "balance_constraint is violated after uncontraction:" << metrics::imbalance(_hg, _config)
-    //        << " > " << _config.partition.epsilon);
-    Stats::instance().add(_config, "finalImbalance", current_metrics.imbalance);
-    if (_config.partition.verbose_output) {
-      LOG("final weights (RB):   w(0)=" << _hg.partWeight(0) << " w(1)=" << _hg.partWeight(1));
-    }
+    // ASSERT(current_imbalance <= _context.partition.epsilon,
+    //        "balance_constraint is violated after uncontraction:" << metrics::imbalance(_hg, _context)
+    //        << ">" << __context.partition.epsilon);
+    _context.stats.set(StatTag::LocalSearch, "finalImbalance", current_metrics.imbalance);
+
     bool improvement_found = false;
-    switch (_config.partition.objective) {
+    switch (_context.partition.objective) {
       case Objective::cut:
-        Stats::instance().add(_config, "finalCut", current_metrics.cut);
-        if (_config.partition.verbose_output) {
-          LOG("final cut: " << current_metrics.cut);
-        }
+        _context.stats.set(StatTag::LocalSearch, "finalCut", current_metrics.cut);
         improvement_found = current_metrics.cut < initial_objective;
         break;
       case Objective::km1:
-        if (_config.partition.mode == Mode::recursive_bisection) {
+        if (_context.partition.mode == Mode::recursive_bisection) {
           // In recursive bisection-based (initial) partitioning, km1
           // is optimized using TwoWayFM and cut-net splitting. Since
           // TwoWayFM optimizes cut, current_metrics.km1 is not updated
@@ -159,14 +144,11 @@ class VertexPairCoarsenerBase : public CoarsenerBase {
           // we explicitly calculated the metric after uncoarsening.
           current_metrics.km1 = metrics::km1(_hg);
         }
-        Stats::instance().add(_config, "finalKm1", current_metrics.km1);
-        if (_config.partition.verbose_output) {
-          LOG("final km1: " << current_metrics.km1);
-        }
+        _context.stats.set(StatTag::LocalSearch, "finalKm1", current_metrics.km1);
         improvement_found = current_metrics.km1 < initial_objective;
         break;
       default:
-        LOG("Unknown Objective");
+        LOG << "Unknown Objective";
         exit(-1);
     }
 
@@ -196,7 +178,7 @@ class VertexPairCoarsenerBase : public CoarsenerBase {
   }
 
   using CoarsenerBase::_hg;
-  using CoarsenerBase::_config;
+  using CoarsenerBase::_context;
   PrioQueue _pq;
 };
 }  // namespace kahypar

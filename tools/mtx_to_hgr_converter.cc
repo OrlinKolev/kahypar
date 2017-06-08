@@ -31,7 +31,7 @@ int main(int argc, char* argv[]) {
   std::string mtx_filename(argv[1]);
   std::string hgr_filename(mtx_filename + ".hgr");
   std::cout << "Converting MTX matrix " << mtx_filename << " to HGR hypergraph format: "
-  << hgr_filename << "..." << std::endl;
+            << hgr_filename << "..." << std::endl;
   mtxconversion::convertMtxToHgr(mtx_filename, hgr_filename);
   std::cout << " ... done!" << std::endl;
   return 0;

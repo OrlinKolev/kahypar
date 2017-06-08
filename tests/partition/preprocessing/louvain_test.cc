@@ -25,17 +25,16 @@
 
 #include "gmock/gmock.h"
 
+#include "kahypar/datastructure/graph.h"
 #include "kahypar/definitions.h"
 #include "kahypar/macros.h"
-#include "kahypar/datastructure/graph.h"
 #include "kahypar/partition/preprocessing/louvain.h"
 #include "kahypar/partition/preprocessing/modularity.h"
 
-using::testing::Eq;
-using::testing::Test;
+using ::testing::Eq;
+using ::testing::Test;
 
 namespace kahypar {
-
 using ds::Graph;
 
 class ALouvainAlgorithm : public Test {
@@ -44,31 +43,31 @@ class ALouvainAlgorithm : public Test {
     louvain(nullptr),
     hypergraph(7, 4, HyperedgeIndexVector { 0, 2, 6, 9, 12 },
                HyperedgeVector { 0, 2, 0, 1, 3, 4, 3, 4, 6, 2, 5, 6 }),
-    config() {
-    config.preprocessing.louvain_community_detection.edge_weight = LouvainEdgeWeight::non_uniform;
-    louvain = std::make_shared<Louvain<Modularity> >(hypergraph, config);
+    context() {
+    context.preprocessing.community_detection.edge_weight = LouvainEdgeWeight::non_uniform;
+    louvain = std::make_shared<Louvain<Modularity> >(hypergraph, context);
   }
 
   std::shared_ptr<Louvain<Modularity> > louvain;
   Hypergraph hypergraph;
-  Configuration config;
+  Context context;
 };
 
 class AModularityMeasure : public Test {
  public:
   AModularityMeasure() :
     modularity(nullptr),
-    config(),
+    context(),
     hypergraph(7, 4, HyperedgeIndexVector { 0, 2, 6, 9, 12 },
                HyperedgeVector { 0, 2, 0, 1, 3, 4, 3, 4, 6, 2, 5, 6 }),
     graph(nullptr) {
-    config.preprocessing.louvain_community_detection.edge_weight = LouvainEdgeWeight::non_uniform;
-    graph = std::make_shared<Graph>(hypergraph, config);
+    context.preprocessing.community_detection.edge_weight = LouvainEdgeWeight::non_uniform;
+    graph = std::make_shared<Graph>(hypergraph, context);
     modularity = std::make_shared<Modularity>(*graph);
   }
 
   std::shared_ptr<Modularity> modularity;
-  Configuration config;
+  Context context;
   Hypergraph hypergraph;
   std::shared_ptr<Graph> graph;
 };
@@ -135,14 +134,17 @@ TEST_F(AModularityMeasure, CalculatesCorrectGainValuesForIsolatedNode) {
     EdgeWeight w = incidentClusterWeight.weight;
     EdgeWeight gain = modularity->gain(4, cid, w);
     EdgeWeight expected_gain = std::numeric_limits<EdgeWeight>::max() / 2.0L;
-    if (cid == 8) expected_gain = 0.116319444L;
-    else if (cid == 9) expected_gain = 0.260416667L;
+    if (cid == 8) {
+      expected_gain = 0.116319444L;
+    } else if (cid == 9) {
+      expected_gain = 0.260416667L;
+    }
     ASSERT_LE(std::abs(expected_gain - gain), Graph::kEpsilon);
   }
 }
 
 TEST_F(ALouvainAlgorithm, DoesOneLouvainPass) {
-  Graph graph(hypergraph, config);
+  Graph graph(hypergraph, context);
   Modularity modularity(graph);
   EdgeWeight quality_before = modularity.quality();
   EdgeWeight quality_after = louvain->louvain_pass(graph, modularity);
@@ -150,7 +152,7 @@ TEST_F(ALouvainAlgorithm, DoesOneLouvainPass) {
 }
 
 TEST_F(ALouvainAlgorithm, AssingsMappingToNextLevelFinerGraph) {
-  Graph graph(hypergraph, config);
+  Graph graph(hypergraph, context);
   Modularity modularity(graph);
   louvain->louvain_pass(graph, modularity);
   auto contraction = graph.contractClusters();
@@ -181,7 +183,8 @@ TEST(ALouvainKarateClub, DoesLouvainAlgorithm) {
   ASSERT_EQ(num_edges, 78);
   std::vector<std::vector<NodeID> > adj_list(num_nodes, std::vector<NodeID>());
   for (EdgeID i = 0; i < num_edges; ++i) {
-    NodeID u, v;
+    NodeID u = 0;
+    NodeID v = 0;
     in >> u >> v;
     adj_list[--u].push_back(--v);
     adj_list[v].push_back(u);
@@ -197,11 +200,11 @@ TEST(ALouvainKarateClub, DoesLouvainAlgorithm) {
       edges.push_back(e);
     }
   }
-  Configuration config;
+  Context context;
 
-  config.preprocessing.louvain_community_detection.edge_weight = LouvainEdgeWeight::non_uniform;
+  context.preprocessing.community_detection.edge_weight = LouvainEdgeWeight::non_uniform;
   Graph graph(adj_array, edges);
-  Louvain<Modularity, false> louvain(adj_array, edges, config);
+  Louvain<Modularity, false> louvain(adj_array, edges, context);
 
   louvain.run();
   std::vector<ClusterID> expected_comm = { 0, 0, 0, 0, 1, 1, 1, 0, 2, 0, 1, 0, 0, 0, 2, 2, 1, 0,
@@ -210,4 +213,4 @@ TEST(ALouvainKarateClub, DoesLouvainAlgorithm) {
     ASSERT_EQ(louvain.clusterID(node), expected_comm[node]);
 }
 }  // namespace ds
-}  //namespace kahypar
+}  // namespace kahypar

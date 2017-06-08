@@ -23,7 +23,7 @@
 #include "kahypar/datastructure/binary_heap.h"
 #include "kahypar/definitions.h"
 
-using::testing::Test;
+using ::testing::Test;
 
 namespace kahypar {
 namespace ds {
@@ -56,7 +56,7 @@ class AMinHeap : public Test {
   MinHeapType _heap;
 };
 
-typedef::testing::Types<MaxHeapType, MinHeapType> Implementations;
+typedef ::testing::Types<MaxHeapType, MinHeapType> Implementations;
 
 TYPED_TEST_CASE(AHeap, Implementations);
 
@@ -252,7 +252,6 @@ TEST_F(AMinHeap, ReturnsTheMinimumElement) {
   this->_heap.push(0, 4);
   this->_heap.push(4, 1);
   ASSERT_EQ(this->_heap.top(), 4);
-  LOG("done");
 }
 
 TEST_F(AMinHeap, ReturnsTheMinimumKey) {

@@ -3,15 +3,66 @@ KaHyPar - Karlsruhe Hypergraph Partitioning
 
 License|Linux & macOS Build|Windows Build|Coverity Scan|SonarQube|
 |:--:|:--:|:--:|:--:|:--:|
-|[![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](http://www.gnu.org/licenses/gpl-3.0)|[![Travis-CI Status](https://travis-ci.com/SebastianSchlag/kahypar.svg?token=ZcLRsjUs4Yprny1FyfPy&branch=master)](https://travis-ci.com/SebastianSchlag/kahypar.svg?token=ZcLRsjUs4Yprny1FyfPy&branch=master)|[![Appveyor Status](https://ci.appveyor.com/api/projects/status/s7dagw0l6s8kgmui?svg=true)](https://ci.appveyor.com/api/projects/status/s7dagw0l6s8kgmui?svg=true)|[![Coverity Status](https://scan.coverity.com/projects/11452/badge.svg)](https://scan.coverity.com/projects/11452/badge.svg)|[![Quality Gate](https://sonarqube.com/api/badges/gate?key=KaHyPar)](https://sonarqube.com/dashboard/index/KaHyPar)|
+|[![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](http://www.gnu.org/licenses/gpl-3.0)|[![Travis-CI Status](https://travis-ci.com/SebastianSchlag/kahypar.svg?token=ZcLRsjUs4Yprny1FyfPy&branch=master)](https://travis-ci.com/SebastianSchlag/kahypar)|[![Appveyor Status](https://ci.appveyor.com/api/projects/status/s7dagw0l6s8kgmui?svg=true)](https://ci.appveyor.com/project/SebastianSchlag/kahypar-vr7q9)|[![Coverity Status](https://scan.coverity.com/projects/11452/badge.svg)](https://scan.coverity.com/projects/11452/badge.svg)|[![Quality Gate](https://sonarqube.com/api/badges/gate?key=KaHyPar)](https://sonarqube.com/dashboard/index/KaHyPar)|
 
+What is a Hypergraph? What is Hypergraph Partitioning?
+-----------
+[Hypergraphs][HYPERGRAPHWIKI] are a generalization of graphs, where each (hyper)edge (also called net) can
+connect more than two vertices. The *k*-way hypergraph partitioning problem is the generalization of the well-known graph partitioning problem: partition the vertex set into *k* disjoint
+blocks of bounded size (at most 1 + ε times the average block size), while minimizing an
+objective function defined on the nets. 
+
+The two most prominent objective functions are the cut-net and the connectivity (or λ − 1)
+metrics. Cut-net is a straightforward generalization of the edge-cut objective in graph partitioning
+(i.e., minimizing the sum of the weights of those nets that connect more than one block). The
+connectivity metric additionally takes into account the actual number λ of blocks connected by a
+net. By summing the (λ − 1)-values of all nets, one accurately models the total communication
+volume of parallel sparse matrix-vector multiplication and once more gets a metric that reverts
+to edge-cut for plain graphs.
+
+<img src="https://cloud.githubusercontent.com/assets/484403/25314222/3a3bdbda-2840-11e7-9961-3bbc59b59177.png" alt="alt text" width="50%" height="50%"><img src="https://cloud.githubusercontent.com/assets/484403/25314225/3e061e42-2840-11e7-860c-028a345d1641.png" alt="alt text" width="50%" height="50%">
+
+What is KaHyPar?
+-----------
+KaHyPar is a multilevel hypergraph partitioning framework for optimizing the cut- and the
+(λ − 1)-metric. It supports both *recursive bisection* and *direct k-way* partitioning.
+As a multilevel algorithm, it consist of three phases: In the *coarsening phase*, the
+hypergraph is coarsened to obtain a hierarchy of smaller hypergraphs. After applying an
+*initial partitioning* algorithm to the smallest hypergraph in the second phase, coarsening is
+undone and, at each level, a *local search* method is used to improve the partition induced by
+the coarser level. KaHyPar instantiates the multilevel approach in its most extreme version,
+removing only a single vertex in every level of the hierarchy.
+By using this very fine grained *n*-level approach combined with strong local search heuristics,
+it computes solutions of very high quality.
+Its algorithms and detailed experimental results are presented in several [research publications][KAHYPARLIT].
+
+#### Experimental Results
+ We use the performance plots introduced in [ALENEX'16][ALENEX'16] to compare KaHyPar to other partitioning algorithms in terms of solution quality:
+For each algorithm, these plots relate the smallest minimum cut of all algorithms to the
+corresponding cut produced by the algorithm on a per-instance basis. For each algorithm,
+these ratios are sorted in increasing order. The plots use a cube root scale for both axes
+to reduce right skewness and show 1 − (best/algorithm) on the y-axis to highlight the
+instances were each partitioner performs badly. A point close to one indicates that the
+<img src="https://cloud.githubusercontent.com/assets/484403/26682208/eb1ee650-46df-11e7-97f9-42d884dd792c.png" alt="alt text" width="50%" height="50%" align="right">
+partition produced by the corresponding algorithm was considerably worse than the partition
+produced by the best algorithm. A value of zero therefore indicates that the corresponding
+algorithm produced the best solution. Points above one correspond to infeasible solutions
+that violated the balance constraint. Thus an algorithm is considered to outperform another
+algorithm if its corresponding ratio values are below those of the other algorithm.
+
+
+**Interactive** visualizations of the performance plots and detailed per-instance results can be found on
+the website accompanying each publication:
+ - KaHyPar-CA: [SEA'17][SEA'17bench] (latest version of KaHyPar)
+ - KaHyPar-K:  [ALENEX'17][ALENEX'17bench] (referred to as KaHyPar in the picture above)
+ - KaHyPar-R:  [ALENEX'16][ALENEX'16bench] (only experimental results)
 
 Requirements:
 -----------
 The Karlsruhe Hypergraph Partitioning Framework requires:
 
  - A 64-bit operating system. Linux, Mac OS X and Windows are currently supported.
- - A modern, C++11 ready compiler such as `g++` version 4.9 or higher or `clang` version 3.2 or higher.
+ - A modern, ![C++14](https://img.shields.io/badge/C++-14-blue.svg?style=flat)-ready compiler such as `g++` version 5.2 or higher or `clang` version 3.2 or higher.
  - The [cmake][cmake] build system.
  - The [Boost.Program_options][Boost.Program_options] library.
 
@@ -40,9 +91,9 @@ The binary is located at: `build/kahypar/application/`.
 KaHyPar has several configuration parameters. For a list of all possible parameters please run: `./KaHyPar --help`.
 We use the [hMetis format](http://glaros.dtc.umn.edu/gkhome/fetch/sw/hmetis/manual.pdf) for the input hypergraph file as well as the partition output file.
     
-Currently we provide three different presets that correspond to the configuration used in the 
-[ALENEX'16](http://epubs.siam.org/doi/abs/10.1137/1.9781611974317.5) publication, the [ALENEX'17](http://epubs.siam.org/doi/abs/10.1137/1.9781611974768.3) publication,
-and our [SEA'17](https://nms.kcl.ac.uk/informatics/events/SEA2017/) submission.
+Currently we provide three different presets that correspond to the configurations used in the publications at
+[ALENEX'16][ALENEX'16], [ALENEX'17][ALENEX'17],
+and [SEA'17][SEA'17].
 
 To start KaHyPar in recursive bisection mode (KaHyPar-R) optimizing the cut-net objective run:
 
@@ -72,8 +123,9 @@ KaHyPar is free software provided under the GNU General Public License (GPLv3).
 For more information see the [COPYING file][CF].
 
 We distribute this framework freely to foster the use and development of hypergraph partitioning tools. 
-If you use KaHyPar-R in an academic setting please cite the following paper:
+If you use KaHyPar in an academic setting please cite the appropriate paper:
     
+    // KaHyPar-R
     @inproceedings{shhmss2016alenex,
      author    = {Sebastian Schlag and
                   Vitali Henne and
@@ -87,11 +139,8 @@ If you use KaHyPar-R in an academic setting please cite the following paper:
      pages     = {53--67},
      year      = {2016},
     }
-
-A preliminary version is available [here on arxiv][ALENEX16PAPER].
-
-If you use KaHyPar-K in an academic setting please cite the following paper:
-
+    
+    // KaHyPar-K
     @inproceedings{ahss2017alenex,
      author    = {Yaroslav Akhremtsev and
                   Tobias Heuer and
@@ -102,6 +151,18 @@ If you use KaHyPar-K in an academic setting please cite the following paper:
      pages     = {28--42},
      year      = {2017},
     }
+    
+    // KaHyPar-CA
+    @inproceedings{hs2017sea,
+     author    = {Tobias Heuer and
+                  Sebastian Schlag},
+     title     = {Improving Coarsening Schemes for Hypergraph Partitioning by Exploiting Community Structure},
+     booktitle = {16th International Symposium on Experimental Algorithms, (SEA 2017)},
+     pages     = {50:1--50:19},
+     year      = {2017},
+    }
+
+A preliminary version our ALENEX'16 paper is available [here on arxiv][ALENEX16PAPER].
 
 Contributing:
 ------------
@@ -114,3 +175,11 @@ feel free to contact me or create an issue on the
 [Boost.Program_options]: http://www.boost.org/doc/libs/1_58_0/doc/html/program_options.html
 [ALENEX16PAPER]: https://arxiv.org/abs/1511.03137
 [CF]: https://github.com/SebastianSchlag/kahypar/blob/master/COPYING "Licence"
+[KAHYPARLIT]: https://github.com/SebastianSchlag/kahypar/wiki/Literature "KaHyPar Publications"
+[HYPERGRAPHWIKI]: https://en.wikipedia.org/wiki/Hypergraph "Hypergraphs"
+[ALENEX'16]: http://epubs.siam.org/doi/abs/10.1137/1.9781611974317.5
+[ALENEX'17]: http://epubs.siam.org/doi/abs/10.1137/1.9781611974768.3
+[SEA'17]: https://nms.kcl.ac.uk/informatics/events/SEA2017/accepted.html
+[ALENEX'16bench]: http://dx.doi.org/10.5281/zenodo.30176
+[ALENEX'17bench]: https://algo2.iti.kit.edu/schlag/alenex2017/
+[SEA'17bench]: https://algo2.iti.kit.edu/schlag/sea2017/

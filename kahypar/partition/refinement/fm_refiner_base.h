@@ -26,12 +26,9 @@
 #include "kahypar/datastructure/bucket_queue.h"
 #include "kahypar/datastructure/kway_priority_queue.h"
 #include "kahypar/definitions.h"
-#include "kahypar/partition/configuration.h"
+#include "kahypar/partition/context.h"
 
 namespace kahypar {
-static const bool dbg_refinement_fm_border_node_check = false;
-static const bool dbg_refinement_kway_fm_move = false;
-
 struct RollbackInfo {
   HypernodeID hn;
   PartitionID from_part;
@@ -40,14 +37,17 @@ struct RollbackInfo {
 
 template <typename RollbackElement = Mandatory, typename GainType=Gain>
 class FMRefinerBase {
- public:
-  ~FMRefinerBase() = default;
+ private:
+  static constexpr bool debug = false;
 
+ public:
   FMRefinerBase(const FMRefinerBase&) = delete;
   FMRefinerBase& operator= (const FMRefinerBase&) = delete;
 
   FMRefinerBase(FMRefinerBase&&) = delete;
   FMRefinerBase& operator= (FMRefinerBase&&) = delete;
+
+  ~FMRefinerBase() = default;
 
  protected:
   static constexpr HypernodeID kInvalidHN = std::numeric_limits<HypernodeID>::max();
@@ -74,10 +74,10 @@ class FMRefinerBase {
 #endif
 
 
-  FMRefinerBase(Hypergraph& hypergraph, const Configuration& config) :
+  FMRefinerBase(Hypergraph& hypergraph, const Context& context) :
     _hg(hypergraph),
-    _config(config),
-    _pq(config.partition.k),
+    _context(context),
+    _pq(context.partition.k),
     _performed_moves(),
     _hns_to_activate() {
     _performed_moves.reserve(_hg.initialNumNodes());
@@ -95,23 +95,23 @@ class FMRefinerBase {
 
   bool moveIsFeasible(const HypernodeID max_gain_node, const PartitionID from_part,
                       const PartitionID to_part) const {
-    ASSERT(_config.partition.mode == Mode::direct_kway,
+    ASSERT(_context.partition.mode == Mode::direct_kway,
            "Method should only be called in direct partitioning");
     return (_hg.partWeight(to_part) + _hg.nodeWeight(max_gain_node)
-            <= _config.partition.max_part_weights[0]) && (_hg.partSize(from_part) - 1 != 0);
+            <= _context.partition.max_part_weights[0]) && (_hg.partSize(from_part) - 1 != 0);
   }
 
   void moveHypernode(const HypernodeID hn, const PartitionID from_part,
                      const PartitionID to_part) {
-    ASSERT(_hg.isBorderNode(hn), "Hypernode " << hn << " is not a border node!");
-    DBG(dbg_refinement_kway_fm_move, "moving HN" << hn << " from " << from_part
-        << " to " << to_part << " (weight=" << _hg.nodeWeight(hn) << ")");
+    ASSERT(_hg.isBorderNode(hn), "Hypernode" << hn << "is not a border node!");
+    DBG << "moving HN" << hn << "from" << from_part
+        << "to" << to_part << "(weight=" << _hg.nodeWeight(hn) << ")";
     _hg.changeNodePart(hn, from_part, to_part);
   }
 
   PartitionID heaviestPart() const {
     PartitionID heaviest_part = 0;
-    for (PartitionID part = 1; part < _config.partition.k; ++part) {
+    for (PartitionID part = 1; part < _context.partition.k; ++part) {
       if (_hg.partWeight(part) > _hg.partWeight(heaviest_part)) {
         heaviest_part = part;
       }
@@ -141,8 +141,8 @@ class FMRefinerBase {
   }
 
   void rollback(int last_index, const int min_cut_index) {
-    DBG(false, "min_cut_index=" << min_cut_index);
-    DBG(false, "last_index=" << last_index);
+    DBG << "min_cut_index=" << min_cut_index;
+    DBG << "last_index=" << last_index;
     while (last_index != min_cut_index) {
       const HypernodeID hn = _performed_moves[last_index].hn;
       const PartitionID from_part = _performed_moves[last_index].to_part;
@@ -153,7 +153,7 @@ class FMRefinerBase {
   }
 
   Hypergraph& _hg;
-  const Configuration& _config;
+  const Context& _context;
   KWayRefinementPQ _pq;
   std::vector<RollbackElement> _performed_moves;
   std::vector<HypernodeID> _hns_to_activate;
