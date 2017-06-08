@@ -65,6 +65,16 @@ static inline void partition(Hypergraph& hypergraph, const Context& context) {
         }
         return true;
       } ());
+
+  std::vector<unsigned int> he_sizes;
+  for (HyperedgeID he : hypergraph.edges()) {
+    he_sizes.push_back(hypergraph.edgeSize(he));
+  }
+
+  size_t target = he_sizes.size() * context.local_search.fm.he_size_percentile;
+  std::nth_element(he_sizes.begin(), he_sizes.begin() + target, he_sizes.end());
+  context.local_search.fm.he_size_at_percentile = he_sizes[target];
+
   switch (context.partition.mode) {
     case Mode::recursive_bisection:
       recursive_bisection::partition(hypergraph, context);

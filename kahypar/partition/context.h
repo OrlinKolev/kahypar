@@ -177,6 +177,9 @@ struct LocalSearchParameters {
     int max_number_of_fruitless_moves = 350;
     double adaptive_stopping_alpha = 1.0;
     RefinementStoppingRule stopping_rule = RefinementStoppingRule::simple;
+    int netstatus_variant = 0;
+    double he_size_percentile = 0.99;
+    mutable HyperedgeID he_size_at_percentile;
   };
 
   struct Sclap {

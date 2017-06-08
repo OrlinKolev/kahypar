@@ -181,6 +181,10 @@ static inline void serialize(const Context& context, const Hypergraph& hypergrap
     }
   }
 
+  if (context.local_search.algorithm == RefinementAlgorithm::twoway_netstatus) {
+    oss << " netstatus_variant=" << context.local_search.fm.netstatus_variant;
+  }
+
   oss << " " << context.stats.serialize().str()
       << " git=" << STR(KaHyPar_BUILD_VERSION)
       << std::endl;

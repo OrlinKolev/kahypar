@@ -49,12 +49,12 @@ namespace kahypar {
 template <class StoppingPolicy = Mandatory,
           class FMImprovementPolicy = CutDecreasedOrInfeasibleImbalanceDecreased>
 class TwoWayNetstatusRefiner final : public IRefiner,
-                              private FMRefinerBase<HypernodeID>{
+                              private FMRefinerBase<HypernodeID, FineGain>{
  private:
   static constexpr bool debug = false;
 
   using HypernodeWeightArray = std::array<HypernodeWeight, 2>;
-  using Base = FMRefinerBase<HypernodeID>;
+  using Base = FMRefinerBase<HypernodeID, FineGain>;
 
  public:
   TwoWayNetstatusRefiner(Hypergraph& hypergraph, const Context& context) :
@@ -64,18 +64,49 @@ class TwoWayNetstatusRefiner final : public IRefiner,
     _non_border_hns_to_remove(),
     _gain_cache(_hg.initialNumNodes()),
     _locked_hes(_hg.initialNumEdges(), HEState::free),
-    _stopping_policy() {
+    _temp_gains(_hg.initialNumNodes(), 0),
+    _locked_pins(_hg.initialNumEdges(), 0),
+    _stopping_policy(),
+    _max_he_size(std::min(_context.partition.hyperedge_size_threshold,
+                          _context.local_search.fm.he_size_at_percentile)) {
     ASSERT(context.partition.k == 2);
     _non_border_hns_to_remove.reserve(_hg.initialNumNodes());
+
+    DBG << V(_context.local_search.fm.he_size_at_percentile);
   }
 
-  ~TwoWayNetstatusRefiner() override = default;
+  ~TwoWayNetstatusRefiner() override {
+    _context.stats.add(StatTag::LocalSearch, "netstatus_overrides",
+        (double)_stats.netstatus_overrides / _stats.total_pq_pops);
+    _context.stats.add(StatTag::LocalSearch, "netstatus_contrib",
+        _stats.netstatus_total / (_stats.netstatus_total + _stats.gain_total));
+  }
 
   TwoWayNetstatusRefiner(const TwoWayNetstatusRefiner&) = delete;
   TwoWayNetstatusRefiner& operator= (const TwoWayNetstatusRefiner&) = delete;
 
   TwoWayNetstatusRefiner(TwoWayNetstatusRefiner&&) = delete;
   TwoWayNetstatusRefiner& operator= (TwoWayNetstatusRefiner&&) = delete;
+
+  FineGain getLooseHEDelta(HyperedgeID he) {
+    FineGain size = _hg.edgeSize(he);
+    FineGain locked = _locked_pins.get(he);
+    FineGain free = size - locked;
+
+    switch (_context.local_search.fm.netstatus_variant) {
+      case 0:
+        return (_max_he_size / size) * (locked / free);
+      case 1:
+        return locked / free;
+      case 2:
+        return (1 / size) * (locked / free);
+      case 3:
+        return locked / size;
+      default:
+        ASSERT(false);
+        return 0;
+    }
+  }
 
   void activate(const HypernodeID hn,
                 const HypernodeWeightArray& max_allowed_part_weights) {
@@ -89,7 +120,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
       DBG << "inserting HN" << hn << "with gain "
           << computeGain(hn) << "in PQ" << 1 - _hg.partID(hn);
 
-      _pq.insert(hn, 1 - _hg.partID(hn), _gain_cache.value(hn));
+      _pq.insert(hn, 1 - _hg.partID(hn), _gain_cache.value(hn) + _temp_gains.get(hn));
       if (_hg.partWeight(1 - _hg.partID(hn)) < max_allowed_part_weights[1 - _hg.partID(hn)]) {
         _pq.enablePart(1 - _hg.partID(hn));
       }
@@ -133,17 +164,11 @@ class TwoWayNetstatusRefiner final : public IRefiner,
     reset();
     _he_fully_active.reset();
     _locked_hes.resetUsedEntries();
+    _locked_pins.resetUsedEntries();
+    _temp_gains.resetUsedEntries();
 
-    // Will always be the case in the first FM pass, since the just uncontracted HN
-    // was not seen before.
-    ASSERT(changes.representative.size() == 1, V(changes.representative.size()));
-    ASSERT(changes.contraction_partner.size() == 1, V(changes.contraction_partner.size()));
-    if (!_gain_cache.isCached(refinement_nodes[1]) && _gain_cache.isCached(refinement_nodes[0])) {
-      // In further FM passes, changes will be set to 0 by the caller.
-      _gain_cache.setValue(refinement_nodes[1], _gain_cache.value(refinement_nodes[0])
-                           + changes.contraction_partner[0]);
-      _gain_cache.updateValue(refinement_nodes[0], changes.representative[0]);
-    }
+    _gain_cache.setValue(refinement_nodes[0], computeGain(refinement_nodes[0]));
+    _gain_cache.setValue(refinement_nodes[1], computeGain(refinement_nodes[1]));
 
     Randomize::instance().shuffleVector(refinement_nodes, refinement_nodes.size());
     for (const HypernodeID& hn : refinement_nodes) {
@@ -174,21 +199,34 @@ class TwoWayNetstatusRefiner final : public IRefiner,
                                               _context, beta, best_metrics.cut, current_cut)) {
       ASSERT(_pq.isEnabled(0) || _pq.isEnabled(1));
 
-      Gain max_gain = kInvalidGain;
+      FineGain max_gain = kInvalidGain;
       HypernodeID max_gain_node = kInvalidHN;
       PartitionID to_part = Hypergraph::kInvalidPartition;
       _pq.deleteMax(max_gain_node, max_gain, to_part);
+
+      _stats.total_pq_pops++;
+      if (max_gain > 0) {
+        if (max_gain - _temp_gains.get(max_gain_node) < 0) {
+          _stats.netstatus_overrides++;
+        } else {
+          _stats.gain_total += max_gain - _temp_gains.get(max_gain_node);
+          _stats.netstatus_total += _temp_gains.get(max_gain_node);
+        }
+      }
 
       PartitionID from_part = _hg.partID(max_gain_node);
 
       ASSERT(!_hg.marked(max_gain_node), V(max_gain_node));
       ASSERT(_hg.isBorderNode(max_gain_node), V(max_gain_node));
 
-      ASSERT(max_gain == computeGain(max_gain_node));
-      ASSERT(max_gain == _gain_cache.value(max_gain_node));
+      ASSERT(ALMOST_EQUALS(max_gain, computeGain(max_gain_node) + _temp_gains.get(max_gain_node)));
+      ASSERT(ALMOST_EQUALS(max_gain,
+                           _gain_cache.value(max_gain_node) + _temp_gains.get(max_gain_node)));
       ASSERT([&]() {
           _hg.changeNodePart(max_gain_node, from_part, to_part);
-          ASSERT((current_cut - max_gain) == metrics::hyperedgeCut(_hg),
+          ASSERT(ALMOST_EQUALS(
+              (current_cut - (max_gain - _temp_gains.get(max_gain_node))),
+              metrics::hyperedgeCut(_hg)),
                  "cut=" << current_cut - max_gain << "!=" << metrics::hyperedgeCut(_hg));
           _hg.changeNodePart(max_gain_node, to_part, from_part);
           return true;
@@ -203,8 +241,8 @@ class TwoWayNetstatusRefiner final : public IRefiner,
 
       current_imbalance = metrics::imbalance(_hg, _context);
 
-      current_cut -= max_gain;
-      _stopping_policy.updateStatistics(max_gain);
+      current_cut -= _gain_cache.value(max_gain_node);
+      _stopping_policy.updateStatistics(_gain_cache.value(max_gain_node));
 
       ASSERT(current_cut == metrics::hyperedgeCut(_hg),
              V(current_cut) << V(metrics::hyperedgeCut(_hg)));
@@ -356,9 +394,10 @@ class TwoWayNetstatusRefiner final : public IRefiner,
               ASSERT(!_hg.active(pin) || _pq.contains(pin, other_part), V(pin));
               if (_pq.contains(pin, other_part)) {
                 ASSERT(!_hg.marked(pin), V(pin));
-                ASSERT(_pq.key(pin, other_part) == computeGain(pin),
-                       V(pin) << V(computeGain(pin)) << V(_pq.key(pin, other_part))
-                              << V(_hg.partID(pin)) << V(other_part));
+                ASSERT(ALMOST_EQUALS(_pq.key(pin, other_part),
+                                     computeGain(pin) + _temp_gains.get(pin)),
+                       V(pin) << V(computeGain(pin)) << V(_temp_gains.get(pin))
+                       << V(_pq.key(pin, other_part)) << V(_hg.partID(pin)) << V(other_part));
               } else if (!_hg.marked(pin)) {
                 ASSERT(true == false, "HN" << pin << "not in PQ, but also not marked!");
               }
@@ -411,6 +450,27 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   // This is used for the state transitions: free -> loose and loose -> locked
   void fullUpdate(const PartitionID from_part,
                   const PartitionID to_part, const HyperedgeID he) {
+
+    FineGain state_gain = 0;
+    if (_locked_hes.get(he) == HEState::free) {
+      _locked_pins.set(he, 1);
+    }
+    state_gain += getLooseHEDelta(he);
+
+    for (const HypernodeID& pin : _hg.pins(he)) {
+      // for free -> loose, set positive delta in direction from_part -> to_part
+      // for loose -> locked, undo existing positive delta in direction to_part -> from_part
+      const PartitionID target_part = 1 - _hg.partID(pin);
+      if (target_part != to_part) {
+        state_gain *= -1;
+      }
+
+      _temp_gains.set(pin, _temp_gains.get(pin) + state_gain);
+      if (_pq.contains(pin)) {
+        _pq.updateKeyBy(pin, target_part, state_gain);
+      }
+    }
+
     const HypernodeID pin_count_from_part_after_move = _hg.pinCountInPart(he, from_part);
     const HypernodeID pin_count_to_part_after_move = _hg.pinCountInPart(he, to_part);
 
@@ -495,6 +555,25 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   template <bool update_local_search_pq = true>
   void deltaUpdate(const PartitionID from_part,
                    const PartitionID to_part, const HyperedgeID he) {
+
+    if (update_local_search_pq) {
+      FineGain state_gain = -getLooseHEDelta(he);
+      _locked_pins.set(he, _locked_pins.get(he) + 1);
+      state_gain += getLooseHEDelta(he);
+
+      for (const HypernodeID& pin : _hg.pins(he)) {
+        const PartitionID target_part = 1 - _hg.partID(pin);
+        if (target_part != to_part) {
+          state_gain *= -1;
+        }
+
+        _temp_gains.set(pin, _temp_gains.get(pin) + state_gain);
+        if (_pq.contains(pin)) {
+          _pq.updateKeyBy(pin, target_part, state_gain);
+        }
+      }
+    }
+
     const HypernodeID pin_count_from_part_after_move = _hg.pinCountInPart(he, from_part);
     const HypernodeID pin_count_to_part_after_move = _hg.pinCountInPart(he, to_part);
 
@@ -612,6 +691,17 @@ class TwoWayNetstatusRefiner final : public IRefiner,
       } (), "GainCache Invalid");
   }
 
+  bool ALMOST_EQUALS(FineGain a, FineGain b) {
+    return std::abs(a - b) < 1e-6;
+  }
+
+  struct stats {
+    int total_pq_pops = 0;
+    int netstatus_overrides = 0;
+    double netstatus_total = 0;
+    double gain_total = 0;
+  };
+
   using Base::_hg;
   using Base::_context;
   using Base::_pq;
@@ -624,5 +714,9 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   TwoWayFMGainCache<Gain> _gain_cache;
   ds::FastResetArray<PartitionID> _locked_hes;
   StoppingPolicy _stopping_policy;
+  ds::FastResetArray<FineGain> _temp_gains;
+  ds::FastResetArray<unsigned int> _locked_pins;
+  stats _stats;
+  unsigned int _max_he_size;
 };
 }                                   // namespace kahypar

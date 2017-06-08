@@ -31,7 +31,7 @@
 // #define USE_BUCKET_QUEUE
 
 // Gather advanced statistics
-// #define GATHER_STATS
+#define GATHER_STATS
 
 namespace kahypar {
 using HypernodeID = uint32_t;

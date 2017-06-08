@@ -26,10 +26,10 @@ action='run'
 
 # this is used on 'run' and 'commit'
 # set to refiner currently in development
-default_refiner='twoway_soft_gain'
+default_refiner='twoway_netstatus'
 
 # this is used on 'eval' and 'commit'
-baseline_refiners='twoway_fm'
+baseline_refiners='twoway_soft_gain twoway_fm'
 
 build=true
 
@@ -119,7 +119,7 @@ test_graph="ISPD98_ibm01.hgr"
 
 eval_graphs=$(ls "$KAHYPAR_TEST_DATA_DIR" | grep -v KaHyPar)
 
-args=( "--mode" "recursive" "--objective" "km1" "--epsilon" "0.03" )
+args=( "-s" "true" "--mode" "recursive" "--objective" "km1" "--epsilon" "0.03" )
 
 if [ "$action" == 'eval' ]
 then
