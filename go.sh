@@ -26,10 +26,10 @@ action='run'
 
 # this is used on 'run' and 'commit'
 # set to refiner currently in development
-default_refiner='twoway_fm'
+default_refiner='twoway_soft_gain'
 
 # this is used on 'eval' and 'commit'
-baseline_refiners=''
+baseline_refiners='twoway_fm'
 
 build=true
 
