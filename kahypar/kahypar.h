@@ -248,6 +248,10 @@ REGISTER_DISPATCHED_REFINER(RefinementAlgorithm::twoway_soft_gain,
                             TwoWaySoftGainFactoryDispatcher,
                             meta::PolicyRegistry<RefinementStoppingRule>::getInstance().getPolicy(
                               context.local_search.fm.stopping_rule));
+REGISTER_DISPATCHED_REFINER(RefinementAlgorithm::twoway_th_soft_gain,
+                            TwoWayThSoftGainFactoryDispatcher,
+                            meta::PolicyRegistry<RefinementStoppingRule>::getInstance().getPolicy(
+                              context.local_search.fm.stopping_rule));
 REGISTER_DISPATCHED_REFINER(RefinementAlgorithm::kway_fm,
                             KWayFMFactoryDispatcher,
                             meta::PolicyRegistry<RefinementStoppingRule>::getInstance().getPolicy(

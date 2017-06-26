@@ -26,10 +26,10 @@ action='run'
 
 # this is used on 'run' and 'commit'
 # set to refiner currently in development
-default_refiner='twoway_netstatus'
+default_refiner='twoway_th_soft_gain'
 
 # this is used on 'eval' and 'commit'
-baseline_refiners='twoway_soft_gain twoway_fm'
+baseline_refiners='twoway_netstatus twoway_soft_gain twoway_fm'
 
 build=true
 

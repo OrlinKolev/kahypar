@@ -431,10 +431,16 @@ void processCommandLineInput(Context& context, int argc, char* argv[]) {
     "(default: 250)")
     ("r-netstatus-variant",
     po::value<int>(&context.local_search.fm.netstatus_variant)->value_name("<int>"),
-    "(default: 0")
+    "(default: 0)")
     ("r-he-size-percentile",
     po::value<double>(&context.local_search.fm.he_size_percentile)->value_name("<double>"),
-    "(default: 0.99")
+    "(default: 0.99)")
+    ("r-thresholds",
+    po::value<std::string>(&context.local_search.fm.thresholds)->value_name("<string>"),
+    "(default: \"0.1;0.5;0.7;0.9;1.1\")")
+    ("r-gain-factors",
+    po::value<std::string>(&context.local_search.fm.gain_factors)->value_name("<string>"),
+    "(default: \"-1;0;0.25;0.5;1\")")
     ("r-fm-stop-alpha",
     po::value<double>(&context.local_search.fm.adaptive_stopping_alpha)->value_name("<double>"),
     "Parameter alpha for adaptive stopping rule \n"
