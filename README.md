@@ -1,9 +1,9 @@
-KaHyPar - Karlsruhe Hypergraph Partitioning
-===============
+<h1 align="center">KaHyPar - Karlsruhe Hypergraph Partitioning</h1>
 
-License|Linux & macOS Build|Windows Build|Coverity Scan|SonarQube|
-|:--:|:--:|:--:|:--:|:--:|
-|[![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](http://www.gnu.org/licenses/gpl-3.0)|[![Travis-CI Status](https://travis-ci.com/SebastianSchlag/kahypar.svg?token=ZcLRsjUs4Yprny1FyfPy&branch=master)](https://travis-ci.com/SebastianSchlag/kahypar)|[![Appveyor Status](https://ci.appveyor.com/api/projects/status/s7dagw0l6s8kgmui?svg=true)](https://ci.appveyor.com/project/SebastianSchlag/kahypar-vr7q9)|[![Coverity Status](https://scan.coverity.com/projects/11452/badge.svg)](https://scan.coverity.com/projects/11452/badge.svg)|[![Quality Gate](https://sonarqube.com/api/badges/gate?key=KaHyPar)](https://sonarqube.com/dashboard/index/KaHyPar)|
+
+License|Linux & macOS Build|Windows Build|Code Coverage|Coverity Scan|SonarQube|Fossa
+:--:|:--:|:--:|:--:|:--:|:--:|:--:
+[![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](http://www.gnu.org/licenses/gpl-3.0)|[![Travis-CI Status](https://travis-ci.com/SebastianSchlag/kahypar.svg?token=ZcLRsjUs4Yprny1FyfPy&branch=master)](https://travis-ci.com/SebastianSchlag/kahypar)|[![Appveyor Status](https://ci.appveyor.com/api/projects/status/s7dagw0l6s8kgmui?svg=true)](https://ci.appveyor.com/project/SebastianSchlag/kahypar-vr7q9)|[![codecov](https://codecov.io/gh/SebastianSchlag/kahypar/branch/master/graph/badge.svg)](https://codecov.io/gh/SebastianSchlag/kahypar)|[![Coverity Status](https://scan.coverity.com/projects/11452/badge.svg)](https://scan.coverity.com/projects/11452/badge.svg)|[![Quality Gate](https://sonarqube.com/api/badges/gate?key=KaHyPar)](https://sonarqube.com/dashboard/index/KaHyPar)|[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bhttps%3A%2F%2Fgithub.com%2FSebastianSchlag%2Fkahypar.svg?type=shield)](https://app.fossa.io/projects/git%2Bhttps%3A%2F%2Fgithub.com%2FSebastianSchlag%2Fkahypar?ref=badge_shield)
 
 What is a Hypergraph? What is Hypergraph Partitioning?
 -----------
@@ -121,9 +121,8 @@ Licensing:
 
 KaHyPar is free software provided under the GNU General Public License (GPLv3).
 For more information see the [COPYING file][CF].
-
 We distribute this framework freely to foster the use and development of hypergraph partitioning tools. 
-If you use KaHyPar in an academic setting please cite the appropriate paper:
+If you use KaHyPar in an academic setting please cite the appropriate paper. If you are interested in a commercial license, please contact me.
     
     // KaHyPar-R
     @inproceedings{shhmss2016alenex,

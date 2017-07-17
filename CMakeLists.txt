@@ -17,9 +17,6 @@ add_subdirectory(external_tools/googletest)
 include_directories(SYSTEM ${gtest_SOURCE_DIR}/include ${gtest_SOURCE_DIR})
 include_directories(SYSTEM ${gtest_SOURCE_DIR}/../googlemock/include ${gtest_SOURCE_DIR}/../googlemock/)
 
-#xxhash
-include_directories(SYSTEM external_tools/xxHash/)
-
 option(KAHYPAR_USE_MINIMAL_BOOST
   "Download boost automatically and compile required libraries." OFF)
 
@@ -27,6 +24,9 @@ option(KAHYPAR_USE_GCOV
   "Compile and run tests with gcov for coverage analysis." OFF)
 
 if(KAHYPAR_USE_GCOV)
+   include(CodeCoverage)
+   setup_target_for_coverage(${PROJECT_NAME}_coverage tests coverage)
+
   # find programs
   find_program(GENHTML genhtml)
   find_program(LCOV lcov)
