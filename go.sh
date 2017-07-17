@@ -106,8 +106,8 @@ fi
 
 executable="./build/kahypar/application/KaHyPar"
 
-test_ini="./config/km1_rb_dev17.ini"
-eval_ini="./config/km1_rb_eval17.ini"
+test_ini="./config/km1_rb_ls17.ini"
+eval_ini="./config/km1_rb_ls17.ini"
 
 test_k="8"
 eval_ks="2 4 8 16 32 64 128"
