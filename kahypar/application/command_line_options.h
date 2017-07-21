@@ -441,6 +441,9 @@ void processCommandLineInput(Context& context, int argc, char* argv[]) {
     ("r-gain-factors",
     po::value<std::string>(&context.local_search.fm.gain_factors)->value_name("<string>"),
     "(default: \"-1;0;0.25;0.5;1\")")
+    ("r-lookahead-depth",
+    po::value<int>(&context.local_search.fm.lookahead_depth)->value_name("<int>"),
+    "(default: 4)")
     ("r-fm-stop-alpha",
     po::value<double>(&context.local_search.fm.adaptive_stopping_alpha)->value_name("<double>"),
     "Parameter alpha for adaptive stopping rule \n"

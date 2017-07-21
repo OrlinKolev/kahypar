@@ -35,7 +35,8 @@ struct RollbackInfo {
   PartitionID to_part;
 };
 
-template <typename RollbackElement = Mandatory, typename GainType=Gain>
+template <typename RollbackElement = Mandatory, typename GainType=Gain,
+          typename GainLimits = std::numeric_limits<GainType> >
 class FMRefinerBase {
  private:
   static constexpr bool debug = false;
@@ -51,7 +52,7 @@ class FMRefinerBase {
 
  protected:
   static constexpr HypernodeID kInvalidHN = std::numeric_limits<HypernodeID>::max();
-  static constexpr GainType kInvalidGain = std::numeric_limits<GainType>::lowest();
+  static const GainType kInvalidGain;
   static constexpr HyperedgeWeight kInvalidDecrease = std::numeric_limits<PartitionID>::min();
 
   enum HEState {
@@ -69,8 +70,7 @@ class FMRefinerBase {
                                                                          std::numeric_limits<GainType>
                                                                          > >;
 #else
-  using KWayRefinementPQ = ds::KWayPriorityQueue<HypernodeID, GainType,
-                                                 std::numeric_limits<GainType> >;
+  using KWayRefinementPQ = ds::KWayPriorityQueue<HypernodeID, GainType, GainLimits>;
 #endif
 
 
@@ -158,4 +158,8 @@ class FMRefinerBase {
   std::vector<RollbackElement> _performed_moves;
   std::vector<HypernodeID> _hns_to_activate;
 };
+
+template <typename RollbackElement, typename GainType, typename GainLimits>
+const GainType FMRefinerBase<RollbackElement, GainType, GainLimits>::kInvalidGain
+  = GainLimits::lowest();
 }  // namespace kahypar

@@ -27,10 +27,10 @@
 #include "kahypar/meta/mandatory.h"
 
 namespace kahypar {
-template <typename T = Mandatory>
+template <typename T = Mandatory, typename TLimits = std::numeric_limits<T> >
 class TwoWayFMGainCache {
  private:
-  static constexpr T kNotCached = std::numeric_limits<T>::max();
+  static const T kNotCached;
 
   struct CacheElement {
     T value;
@@ -65,12 +65,12 @@ class TwoWayFMGainCache {
 
   ~TwoWayFMGainCache() = default;
 
-  KAHYPAR_ATTRIBUTE_ALWAYS_INLINE T delta(const size_t index) const {
+  KAHYPAR_ATTRIBUTE_ALWAYS_INLINE const T& delta(const size_t index) const {
     ASSERT(index < _size);
     return _cache[index].delta;
   }
 
-  KAHYPAR_ATTRIBUTE_ALWAYS_INLINE T value(const size_t index) const {
+  KAHYPAR_ATTRIBUTE_ALWAYS_INLINE const T& value(const size_t index) const {
     ASSERT(index < _size);
     return _cache[index].value;
   }
@@ -102,19 +102,19 @@ class TwoWayFMGainCache {
     _cache[index].value = value;
   }
 
-  KAHYPAR_ATTRIBUTE_ALWAYS_INLINE void updateValue(const size_t index, const T value) {
+  KAHYPAR_ATTRIBUTE_ALWAYS_INLINE void updateValue(const size_t index, const T& value) {
     ASSERT(index < _size);
     _cache[index].value += value;
   }
 
-  KAHYPAR_ATTRIBUTE_ALWAYS_INLINE void uncheckedSetDelta(const size_t index, const T value) {
+  KAHYPAR_ATTRIBUTE_ALWAYS_INLINE void uncheckedSetDelta(const size_t index, const T& value) {
     ASSERT(index < _size);
     ASSERT(_cache[index].delta != 0,
            "Index" << index << "is still unused and not tracked for reset!");
     _cache[index].delta = value;
   }
 
-  KAHYPAR_ATTRIBUTE_ALWAYS_INLINE void updateCacheAndDelta(const size_t index, const T delta) {
+  KAHYPAR_ATTRIBUTE_ALWAYS_INLINE void updateCacheAndDelta(const size_t index, const T& delta) {
     ASSERT(index < _size);
     if (_cache[index].delta == 0) {
       _used_delta_entries.push_back(index);
@@ -151,4 +151,7 @@ class TwoWayFMGainCache {
   std::unique_ptr<CacheElement[]> _cache;
   std::vector<size_t> _used_delta_entries;
 };
+
+template<typename T, typename TLimits>
+const T TwoWayFMGainCache<T, TLimits>::kNotCached = TLimits::max();
 }  // namespace kahypar

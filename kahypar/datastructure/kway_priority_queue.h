@@ -36,7 +36,7 @@ template <typename IDType = Mandatory,
           typename KeyType = Mandatory,
           typename MetaKey = Mandatory,
           bool UseRandomTieBreaking = false,
-          class Queue = BinaryMaxHeap<IDType, KeyType> >
+          class Queue = BinaryMaxHeap<IDType, KeyType, MetaKey> >
 class KWayPriorityQueue {
   // using Queue = EnhancedBucketQueue<IDType, KeyType, MetaKey>;
   static constexpr bool debug = false;
@@ -195,7 +195,7 @@ class KWayPriorityQueue {
     --_num_entries;
   }
 
-  KAHYPAR_ATTRIBUTE_ALWAYS_INLINE KeyType key(const IDType id,
+  KAHYPAR_ATTRIBUTE_ALWAYS_INLINE const KeyType& key(const IDType id,
                                               const PartitionID part) const {
     ASSERT(static_cast<unsigned int>(part) < _queues.size(), "Invalid" << V(part));
     ASSERT(_mapping[part].index < _num_nonempty_pqs, V(part));
@@ -227,7 +227,7 @@ class KWayPriorityQueue {
   }
 
   KAHYPAR_ATTRIBUTE_ALWAYS_INLINE void updateKeyBy(const IDType id, const PartitionID part,
-                                                   const KeyType key_delta) {
+                                                   const KeyType& key_delta) {
     ASSERT(static_cast<unsigned int>(part) < _queues.size(), "Invalid" << V(part));
     ASSERT(_mapping[part].index < _num_nonempty_pqs, V(part));
     _queues[_mapping[part].index].updateKeyBy(id, key_delta);

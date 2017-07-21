@@ -332,9 +332,9 @@ class BinaryHeapBase {
   size_t _max_size;
 };
 
-template <typename IDType_, typename KeyType_>
-class BinaryMaxHeap final : public BinaryHeapBase<BinaryMaxHeap<IDType_, KeyType_> >{
-  using Base = BinaryHeapBase<BinaryMaxHeap<IDType_, KeyType_> >;
+template <typename IDType_, typename KeyType_, typename MetaKey_ =  std::numeric_limits<KeyType_> >
+class BinaryMaxHeap final : public BinaryHeapBase<BinaryMaxHeap<IDType_, KeyType_, MetaKey_> >{
+  using Base = BinaryHeapBase<BinaryMaxHeap<IDType_, KeyType_, MetaKey_> >;
   friend Base;
 
  public:
@@ -361,9 +361,9 @@ class BinaryMaxHeap final : public BinaryHeapBase<BinaryMaxHeap<IDType_, KeyType
   }
 };
 
-template <typename IDType_, typename KeyType_>
-class BinaryMinHeap final : public BinaryHeapBase<BinaryMinHeap<IDType_, KeyType_> >{
-  using Base = BinaryHeapBase<BinaryMinHeap<IDType_, KeyType_> >;
+template <typename IDType_, typename KeyType_, typename MetaKey_ = std::numeric_limits<KeyType_> >
+class BinaryMinHeap final : public BinaryHeapBase<BinaryMinHeap<IDType_, KeyType_, MetaKey_> >{
+  using Base = BinaryHeapBase<BinaryMinHeap<IDType_, KeyType_, MetaKey_> >;
   friend Base;
 
  public:
@@ -392,28 +392,28 @@ class BinaryMinHeap final : public BinaryHeapBase<BinaryMinHeap<IDType_, KeyType
 
 
 // Traits specialization for max heap:
-template <typename IDType_, typename KeyType_>
-class BinaryHeapTraits<BinaryMaxHeap<IDType_, KeyType_> >{
+template <typename IDType_, typename KeyType_, typename MetaKey_>
+class BinaryHeapTraits<BinaryMaxHeap<IDType_, KeyType_, MetaKey_> >{
  public:
   using IDType = IDType_;
   using KeyType = KeyType_;
   using Comparator = std::less<KeyType>;
 
   static constexpr KeyType sentinel() {
-    return std::numeric_limits<KeyType_>::max();
+    return MetaKey_::max();
   }
 };
 
 // Traits specialization for min heap:
-template <typename IDType_, typename KeyType_>
-class BinaryHeapTraits<BinaryMinHeap<IDType_, KeyType_> >{
+template <typename IDType_, typename KeyType_, typename MetaKey_>
+class BinaryHeapTraits<BinaryMinHeap<IDType_, KeyType_, MetaKey_> >{
  public:
   using IDType = IDType_;
   using KeyType = KeyType_;
   using Comparator = std::greater<KeyType>;
 
   static constexpr KeyType sentinel() {
-    return std::numeric_limits<KeyType_>::min();
+    return MetaKey_::lowest();
   }
 };
 }  // namespace ds

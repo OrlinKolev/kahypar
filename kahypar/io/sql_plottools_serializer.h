@@ -187,6 +187,8 @@ static inline void serialize(const Context& context, const Hypergraph& hypergrap
   } else if (context.local_search.algorithm == RefinementAlgorithm::twoway_th_soft_gain) {
     oss << " thresholds=" << context.local_search.fm.thresholds;
     oss << " gain_factors=" << context.local_search.fm.gain_factors;
+  } else if (context.local_search.algorithm == RefinementAlgorithm::twoway_lookahead) {
+    oss << " la_depth=" << context.local_search.fm.lookahead_depth;
   }
 
   oss << " " << context.stats.serialize().str()

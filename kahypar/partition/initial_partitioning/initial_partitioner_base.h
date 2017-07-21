@@ -91,6 +91,7 @@ class InitialPartitionerBase {
       if ((_context.local_search.algorithm == RefinementAlgorithm::twoway_fm ||
            _context.local_search.algorithm == RefinementAlgorithm::twoway_netstatus ||
            _context.local_search.algorithm == RefinementAlgorithm::twoway_th_soft_gain ||
+           _context.local_search.algorithm == RefinementAlgorithm::twoway_lookahead ||
            _context.local_search.algorithm == RefinementAlgorithm::twoway_soft_gain) &&
           _context.initial_partitioning.k > 2) {
         refiner = (RefinerFactory::getInstance().createObject(
