@@ -93,7 +93,21 @@ class TwoWayNetstatusRefiner final : public IRefiner,
     FineGain locked = _locked_pins.get(he);
     FineGain free = size - locked;
 
-    switch (_context.local_search.fm.netstatus_variant) {
+    FineGain l_deg = 0, f_deg = 0;
+    if (_context.local_search.fm.netstatus_variant >= 10) {
+      for (const HypernodeID& pin : _hg.pins(he)) {
+        if (_hg.marked(pin)) {
+          l_deg += _hg.nodeDegree(pin);
+        } else {
+          f_deg += _hg.nodeDegree(pin);
+        }
+      }
+
+      locked = l_deg;
+      free = f_deg;
+    }
+
+    switch (_context.local_search.fm.netstatus_variant % 10) {
       case 0:
         return (_max_he_size / size) * (locked / free);
       case 1:
