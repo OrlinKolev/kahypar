@@ -26,10 +26,10 @@ action='run'
 
 # this is used on 'run' and 'commit'
 # set to refiner currently in development
-default_refiner='twoway_netstatus'
+default_refiner='twoway_lookahead'
 
 # this is used on 'eval' and 'commit'
-baseline_refiners='twoway_th_soft_gain twoway_lookahead twoway_soft_gain twoway_fm'
+baseline_refiners='twoway_th_soft_gain twoway_netstatus twoway_soft_gain twoway_fm'
 
 build=true
 
@@ -110,10 +110,10 @@ test_ini="./config/km1_rb_ls17.ini"
 eval_ini="./config/km1_rb_ls17.ini"
 
 test_k="8"
-eval_ks="2 4 8 16 32 64 128"
+eval_ks="2 4 8 16"
 
 test_seed="-1"
-eval_seeds="1 2 3 4 5 6 7 8 9 10"
+eval_seeds="1 2 3 4 5"
 
 test_graph="ISPD98_ibm01.hgr"
 
