@@ -89,13 +89,22 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   TwoWayNetstatusRefiner& operator= (TwoWayNetstatusRefiner&&) = delete;
 
   FineGain getLooseHEDelta(HyperedgeID he) {
+    // TODO(orlin): The whole thing could be speed up by using integer-based
+    // FineGains.  Cong. et al. also actually use floor in their
+    // formula. Furthermore the fine gain serves as a hint which move to choose next,
+    // as is does not correspond to some kind of 'real' gain in the objective.
     FineGain size = _hg.edgeSize(he);
     FineGain locked = _locked_pins.get(he);
     FineGain free = size - locked;
 
     FineGain l_deg = 0, f_deg = 0;
     if (_context.local_search.fm.netstatus_variant >= 10) {
+      // TODO(orlin): Cache this using a vector of size 2 * |E|
+      // to avoid tedious recomputation.
       for (const HypernodeID& pin : _hg.pins(he)) {
+        // TODO(orlin): This is incorrect for our algorithm, since we collapse
+        // parallel nets into a single one and update the weight of the remaining
+        // net accordingly. Therefore we need the _weighted degree_ here.
         if (_hg.marked(pin)) {
           l_deg += _hg.nodeDegree(pin);
         } else {
@@ -107,6 +116,9 @@ class TwoWayNetstatusRefiner final : public IRefiner,
       free = f_deg;
     }
 
+    // TODO(orlin): If it turns out that we could use multiple variants of this,
+    // then this should be implemented as a template policy like the stopping rule
+    // or improvement policy.
     switch (_context.local_search.fm.netstatus_variant % 10) {
       case 0:
         return (_max_he_size / size) * (locked / free);
@@ -471,6 +483,10 @@ class TwoWayNetstatusRefiner final : public IRefiner,
     }
     state_gain += getLooseHEDelta(he);
 
+    // TODO(orlin): Is this really correct? If you look at the pseudocode in Figure 2
+    // of Cong et al., the additional gains are _only_ applied to those pins, which are not
+    // in the anchored (aka. locked) block. Since you add it to both sides, this might be
+    // why you have to do these undos that you forgot in the first place.
     for (const HypernodeID& pin : _hg.pins(he)) {
       // for free -> loose, set positive delta in direction from_part -> to_part
       // for loose -> locked, undo existing positive delta in direction to_part -> from_part
