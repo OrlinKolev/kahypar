@@ -72,7 +72,9 @@ class TwoWayNetstatusRefiner final : public IRefiner,
     ASSERT(context.partition.k == 2);
     _non_border_hns_to_remove.reserve(_hg.initialNumNodes());
 
-    DBG << V(_context.local_search.fm.he_size_at_percentile);
+    _locked_part_cf = _context.local_search.fm.netstatus_variant >= 100 ? 0 : -1;
+    _use_node_degree = _context.local_search.fm.netstatus_variant % 100 >= 10;
+    _formula = _context.local_search.fm.netstatus_variant % 10;
   }
 
   ~TwoWayNetstatusRefiner() override {
@@ -88,18 +90,27 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   TwoWayNetstatusRefiner(TwoWayNetstatusRefiner&&) = delete;
   TwoWayNetstatusRefiner& operator= (TwoWayNetstatusRefiner&&) = delete;
 
+  FineGain getWeightedNodeDegree(const HypernodeID& hn) const {
+    FineGain ret = 0;
+    for (const HyperedgeID& he : _hg.incidentEdges(hn)) {
+      ret += _hg.edgeWeight(he);
+    }
+
+    return ret;
+  }
+
   FineGain getLooseHEDelta(HyperedgeID he) {
     FineGain size = _hg.edgeSize(he);
     FineGain locked = _locked_pins.get(he);
     FineGain free = size - locked;
 
     FineGain l_deg = 0, f_deg = 0;
-    if (_context.local_search.fm.netstatus_variant >= 10) {
+    if (_use_node_degree) {
       for (const HypernodeID& pin : _hg.pins(he)) {
         if (_hg.marked(pin)) {
-          l_deg += _hg.nodeDegree(pin);
+          l_deg += getWeightedNodeDegree(pin);
         } else {
-          f_deg += _hg.nodeDegree(pin);
+          f_deg += getWeightedNodeDegree(pin);
         }
       }
 
@@ -107,7 +118,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
       free = f_deg;
     }
 
-    switch (_context.local_search.fm.netstatus_variant % 10) {
+    switch (_formula) {
       case 0:
         return (_max_he_size / size) * (locked / free);
       case 1:
@@ -241,7 +252,8 @@ class TwoWayNetstatusRefiner final : public IRefiner,
           ASSERT(ALMOST_EQUALS(
               (current_cut - (max_gain - _temp_gains.get(max_gain_node))),
               metrics::hyperedgeCut(_hg)),
-                 "cut=" << current_cut - max_gain << "!=" << metrics::hyperedgeCut(_hg));
+                 "cut=" << current_cut - (max_gain - _temp_gains.get(max_gain_node))
+                   << "!=" << metrics::hyperedgeCut(_hg) << V(current_cut) << V(max_gain) << V(_temp_gains.get(max_gain_node)) << V(metrics::hyperedgeCut(_hg)));
           _hg.changeNodePart(max_gain_node, to_part, from_part);
           return true;
         } ());
@@ -465,23 +477,32 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   void fullUpdate(const PartitionID from_part,
                   const PartitionID to_part, const HyperedgeID he) {
 
-    FineGain state_gain = 0;
+    bool locked = _locked_hes.get(he) != HEState::free;
+
     if (_locked_hes.get(he) == HEState::free) {
       _locked_pins.set(he, 1);
-    }
-    state_gain += getLooseHEDelta(he);
+      const FineGain state_gain = getLooseHEDelta(he);
 
-    for (const HypernodeID& pin : _hg.pins(he)) {
-      // for free -> loose, set positive delta in direction from_part -> to_part
-      // for loose -> locked, undo existing positive delta in direction to_part -> from_part
-      const PartitionID target_part = 1 - _hg.partID(pin);
-      if (target_part != to_part) {
-        state_gain *= -1;
+      for (const HypernodeID& pin : _hg.pins(he)) {
+        const PartitionID target_part = 1 - _hg.partID(pin);
+        FineGain q = (target_part == to_part ? 1 : _locked_part_cf);
+
+        _temp_gains.set(pin, _temp_gains.get(pin) + q * state_gain);
+        if (_pq.contains(pin)) {
+          _pq.updateKeyBy(pin, target_part, q * state_gain);
+        }
       }
+    } else {
+      const FineGain state_gain = getLooseHEDelta(he);
 
-      _temp_gains.set(pin, _temp_gains.get(pin) + state_gain);
-      if (_pq.contains(pin)) {
-        _pq.updateKeyBy(pin, target_part, state_gain);
+      for (const HypernodeID& pin : _hg.pins(he)) {
+        const PartitionID target_part = 1 - _hg.partID(pin);
+        FineGain q = (target_part == to_part ? -_locked_part_cf : -1);
+
+        _temp_gains.set(pin, _temp_gains.get(pin) + q * state_gain);
+        if (_pq.contains(pin)) {
+          _pq.updateKeyBy(pin, target_part, q * state_gain);
+        }
       }
     }
 
@@ -572,18 +593,19 @@ class TwoWayNetstatusRefiner final : public IRefiner,
 
     if (update_local_search_pq) {
       FineGain state_gain = -getLooseHEDelta(he);
-      _locked_pins.set(he, _locked_pins.get(he) + 1);
+      _locked_pins.set(he, _locked_pins.get(he) + 1); // this changes the looseHEDelta
       state_gain += getLooseHEDelta(he);
 
       for (const HypernodeID& pin : _hg.pins(he)) {
         const PartitionID target_part = 1 - _hg.partID(pin);
-        if (target_part != to_part) {
-          state_gain *= -1;
+        FineGain pin_gain = state_gain;
+        if (target_part == from_part) {
+          pin_gain *= _locked_part_cf;
         }
 
-        _temp_gains.set(pin, _temp_gains.get(pin) + state_gain);
+        _temp_gains.set(pin, _temp_gains.get(pin) + pin_gain);
         if (_pq.contains(pin)) {
-          _pq.updateKeyBy(pin, target_part, state_gain);
+          _pq.updateKeyBy(pin, target_part, pin_gain);
         }
       }
     }
@@ -732,5 +754,8 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   ds::FastResetArray<unsigned int> _locked_pins;
   stats _stats;
   unsigned int _max_he_size;
+  int _locked_part_cf;
+  bool _use_node_degree;
+  unsigned int _formula;
 };
 }                                   // namespace kahypar
