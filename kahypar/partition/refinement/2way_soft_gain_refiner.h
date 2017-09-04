@@ -174,6 +174,11 @@ class TwoWaySoftGainRefiner final : public IRefiner,
       PartitionID to_part = Hypergraph::kInvalidPartition;
 
       _pq.deleteMax(max_gain_node, max_gain, to_part);
+
+      // TODO(orlin): This is a potential performance killer. If we decide to
+      // go with soft-gains (based on the current experimental results I would suggest
+      // not to), then we might have to explicitly cache the normal gains or find an
+      // easy way to 'recompute' the original gain from the soft gain.
       Gain cut_delta = computeCut(max_gain_node);
 
       PartitionID from_part = _hg.partID(max_gain_node);
@@ -476,6 +481,10 @@ class TwoWaySoftGainRefiner final : public IRefiner,
   FineGain computeGain(const HypernodeID hn) const {
     FineGain gain = 0;
     ASSERT(_hg.partID(hn) < 2);
+    // TODO(orlin): Correct me if I am wrong, but on first sight,
+    // this does not seem to be the gain function that Tobias
+    // proposed in his Bachelor's thesis at page 63.
+    // Why did you choose sth. different?
     for (const HyperedgeID& he : _hg.incidentEdges(hn)) {
       ASSERT(_hg.edgeSize(he) > 1, V(he));
       FineGain sz = _hg.edgeSize(he);

@@ -100,12 +100,18 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   }
 
   FineGain getLooseHEDelta(HyperedgeID he) {
+    // TODO(orlin): The whole thing could be speed up by using integer-based
+    // FineGains.  Cong. et al. also actually use floor in their
+    // formula. Furthermore the fine gain serves as a hint which move to choose next,
+    // as is does not correspond to some kind of 'real' gain in the objective.
     FineGain size = _hg.edgeSize(he);
     FineGain locked = _locked_pins.get(he);
     FineGain free = size - locked;
 
     FineGain l_deg = 0, f_deg = 0;
     if (_use_node_degree) {
+      // TODO(orlin): Cache this using a vector of size 2 * |E|
+      // to avoid tedious recomputation.
       for (const HypernodeID& pin : _hg.pins(he)) {
         if (_hg.marked(pin)) {
           l_deg += getWeightedNodeDegree(pin);
@@ -119,6 +125,9 @@ class TwoWayNetstatusRefiner final : public IRefiner,
     }
 
     switch (_formula) {
+    // TODO(orlin): If it turns out that we could use multiple variants of this,
+    // then this should be implemented as a template policy like the stopping rule
+    // or improvement policy.
       case 0:
         return (_max_he_size / size) * (locked / free);
       case 1:

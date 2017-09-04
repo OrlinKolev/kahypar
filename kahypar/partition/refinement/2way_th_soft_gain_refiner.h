@@ -46,6 +46,11 @@
 #include "kahypar/utils/randomize.h"
 
 namespace kahypar {
+
+// TODO(orlin): Does this really correspond to thethe threshold softgain FM
+// version as described by Mann and Papp in their paper "Formula partitioning revisited" and
+// implemented in the code we got from them?
+// How does a particular instantiation of thresholds and corresponding soft gains look like?
 template <class StoppingPolicy = Mandatory,
           class FMImprovementPolicy = CutDecreasedOrInfeasibleImbalanceDecreased>
 class TwoWayThSoftGainRefiner final : public IRefiner,
@@ -138,6 +143,8 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
     _locked_hes.resetUsedEntries();
 
     Randomize::instance().shuffleVector(refinement_nodes, refinement_nodes.size());
+    // TODO(orlin): This seems to be a performance bug, since you potentially recompute the gain
+    // of a hypernode multiple times (in case it is a pin of several nets).
     for (const HypernodeID& hn : refinement_nodes) {
       for (const HyperedgeID& he : _hg.incidentEdges(hn)) {
         for (const HypernodeID& pin : _hg.pins(he)) {
@@ -177,6 +184,9 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
       PartitionID to_part = Hypergraph::kInvalidPartition;
 
       _pq.deleteMax(max_gain_node, max_gain, to_part);
+      // TODO(orlin): This is a potential performance killer. If we decide to
+      // go with threshold soft-gains then we might have to explicitly cache the normal
+      // gains or find an easy way to 'recompute' the original gain from the soft gain.
       Gain cut_delta = computeCut(max_gain_node);
 
       PartitionID from_part = _hg.partID(max_gain_node);
@@ -323,6 +333,9 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
     }
 
     // TODO: try to get rid of this
+    // TODO(orlin): This is a potential performance killer. If we decide to
+    // go with threshold soft-gains then we might have to explicitly cache the normal
+    // gains or find an easy way to 'recompute' the original gain from the soft gain.
     FineGain new_gain = computeGain(moved_hn);
     _gain_cache.setValue(moved_hn, new_gain);
     _gain_cache.setDelta(moved_hn, rb_delta + old_gain - new_gain);
@@ -421,6 +434,9 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
     for (const HypernodeID& pin : _hg.pins(he)) {
       FineGain before, after;
       if (_hg.partID(pin) == from_part) {
+        // TODO(orlin): Potential performance bug: Both methods only need
+        // to be called _once_ outside of the forall pins()-loop. Then you
+        // can reuse the values throughout the iterations.
         HypernodeID t = _hg.pinCountInPart(he, to_part);
         HypernodeID sz = _hg.edgeSize(he);
 
@@ -440,6 +456,9 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
         after = getThresholdFactor(t, sz);
       }
 
+      // TODO(orlin): If I understand this correctly, than our soft gains are way more
+      // fine grained than the soft gains of Mann and Papp, since they only apply soft-gains
+      // for move that actually cross a boundary threshold (and not to all moves).
       performNonZeroFullUpdate(pin, (after - before) * _hg.edgeWeight(he), num_active_pins);
     }
 
@@ -459,6 +478,11 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
   void deltaUpdate(const PartitionID from_part,
                    const PartitionID to_part, const HyperedgeID he) {
 
+
+    // TODO(orlin): Performance bottleneck: The whole
+    // computation of delta can be done once for from_part
+    // and to_part and then re-applied
+    // for each of the pins. This saves a lot of computation.
     for (const HypernodeID& pin : _hg.pins(he)) {
       FineGain before, after;
       if (_hg.partID(pin) == from_part) {
@@ -547,6 +571,11 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
 
   FineGain getThresholdFactor(HypernodeID t, HypernodeID sz) const {
     FineGain part = (FineGain)t / (sz-1);
+    // TODO(orlin): How large does the _thresholds vector become?
+    // If it's not too big, then a linear scan might be even faster than
+    // the logarithmic std::lower_bound.
+    // TODO(orlin): For the final version, we might be able to actually hard-code the thresholds
+    // into an std::array.
     auto it = std::lower_bound(_thresholds.begin(), _thresholds.end(), part);
     int index = it - _thresholds.begin();
 
