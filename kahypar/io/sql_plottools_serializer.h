@@ -184,7 +184,8 @@ static inline void serialize(const Context& context, const Hypergraph& hypergrap
   if (context.local_search.algorithm == RefinementAlgorithm::twoway_netstatus) {
     oss << " netstatus_variant=" << context.local_search.fm.netstatus_variant;
     oss << " he_size_percentile=" << context.local_search.fm.he_size_percentile;
-  } else if (context.local_search.algorithm == RefinementAlgorithm::twoway_th_soft_gain) {
+  } else if (context.local_search.algorithm == RefinementAlgorithm::twoway_th_soft_gain
+          || context.local_search.algorithm == RefinementAlgorithm::twoway_th_th_soft_gain) {
     oss << " thresholds=" << context.local_search.fm.thresholds;
     oss << " gain_factors=" << context.local_search.fm.gain_factors;
   } else if (context.local_search.algorithm == RefinementAlgorithm::twoway_lookahead) {

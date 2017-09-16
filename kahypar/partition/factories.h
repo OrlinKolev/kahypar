@@ -37,6 +37,7 @@
 #include "kahypar/partition/refinement/2way_netstatus_refiner.h"
 #include "kahypar/partition/refinement/2way_soft_gain_refiner.h"
 #include "kahypar/partition/refinement/2way_th_soft_gain_refiner.h"
+#include "kahypar/partition/refinement/2way_th_th_soft_gain_refiner.h"
 #include "kahypar/partition/refinement/2way_lookahead_refiner.h"
 #include "kahypar/partition/refinement/i_refiner.h"
 #include "kahypar/partition/refinement/kway_fm_cut_refiner.h"
@@ -84,6 +85,10 @@ using TwoWaySoftGainFactoryDispatcher = meta::StaticMultiDispatchFactory<TwoWayS
                                                                    meta::Typelist<StoppingPolicyClasses> >;
 
 using TwoWayThSoftGainFactoryDispatcher = meta::StaticMultiDispatchFactory<TwoWayThSoftGainRefiner,
+                                                                   IRefiner,
+                                                                   meta::Typelist<StoppingPolicyClasses> >;
+
+using TwoWayThThSoftGainFactoryDispatcher = meta::StaticMultiDispatchFactory<TwoWayThThSoftGainRefiner,
                                                                    IRefiner,
                                                                    meta::Typelist<StoppingPolicyClasses> >;
 
