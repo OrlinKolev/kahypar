@@ -73,6 +73,7 @@ enum class RefinementAlgorithm : uint8_t {
   twoway_th_soft_gain,
   twoway_th_th_soft_gain,
   twoway_lookahead,
+  twoway_new_lookahead,
   kway_fm,
   kway_fm_maxgain,
   kway_fm_km1,
@@ -204,6 +205,7 @@ std::ostream& operator<< (std::ostream& os, const RefinementAlgorithm& algo) {
     case RefinementAlgorithm::twoway_th_soft_gain: return os << "twoway_th_soft_gain";
     case RefinementAlgorithm::twoway_th_th_soft_gain: return os << "twoway_th_th_soft_gain";
     case RefinementAlgorithm::twoway_lookahead: return os << "twoway_lookahead";
+    case RefinementAlgorithm::twoway_new_lookahead: return os << "twoway_new_lookahead";
     case RefinementAlgorithm::kway_fm: return os << "kway_fm";
     case RefinementAlgorithm::kway_fm_maxgain: return os << "kway_fm_maxgain";
     case RefinementAlgorithm::kway_fm_km1: return os << "kway_fm_km1";
@@ -322,8 +324,8 @@ static RefinementAlgorithm refinementAlgorithmFromString(const std::string& type
     return RefinementAlgorithm::twoway_th_soft_gain;
   } else if (type == "twoway_th_th_soft_gain") {
     return RefinementAlgorithm::twoway_th_th_soft_gain;
-  } else if (type == "twoway_lookahead") {
-    return RefinementAlgorithm::twoway_lookahead;
+  } else if (type == "twoway_new_lookahead") {
+    return RefinementAlgorithm::twoway_new_lookahead;
   } else if (type == "kway_fm") {
     return RefinementAlgorithm::kway_fm;
   } else if (type == "kway_fm_km1") {

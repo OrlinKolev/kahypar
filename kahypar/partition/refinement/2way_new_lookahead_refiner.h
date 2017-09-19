@@ -45,140 +45,12 @@
 #include "kahypar/utils/float_compare.h"
 #include "kahypar/utils/randomize.h"
 
+#include "kahypar/partition/refinement/2way_lookahead_refiner.h"
+
 namespace kahypar {
-template <class Gain>
-class VectorGain;
-
-template <class Gain>
-std::ostream& operator<< (std::ostream&, const VectorGain<Gain>&);
-
-template <class Gain>
-bool operator< (const VectorGain<Gain>&, const VectorGain<Gain>&);
-
-template <class Gain>
-bool operator> (const VectorGain<Gain>&, const VectorGain<Gain>&);
-
-template <class Gain>
-bool operator== (const VectorGain<Gain>&, const VectorGain<Gain>&);
-
-template <class Gain>
-class VectorGain {
-public:
-  VectorGain(const VectorGain& v) = default;
-  VectorGain& operator= (const VectorGain& v) = default;
-  VectorGain(VectorGain&& v) = default;
-  VectorGain& operator= (VectorGain&& v) = default;
-  ~VectorGain() = default;
-
-  VectorGain(Gain v) : _v(10, v) {}
-  VectorGain(size_t c, Gain v) : _v(c, v) {}
-  VectorGain(const std::vector<Gain>& _other) : _v(_other) {}
-
-  VectorGain& operator+= (const VectorGain& val) {
-    for (size_t i = 0; i < _v.size(); i++) {
-      _v[i] += val._v[i];
-    }
-    return *this;
-  }
-
-  VectorGain& operator-= (const VectorGain& val) {
-    for (size_t i = 0; i < _v.size(); i++) {
-      _v[i] -= val._v[i];
-    }
-    return *this;
-  }
-
-  Gain& operator[] (size_t i) {return _v[i];}
-  const Gain& operator[] (size_t i) const {return _v[i];}
-
-  size_t size() const {return _v.size();}
-
-  friend std::ostream& operator<< <> (std::ostream&, const VectorGain<Gain>&);
-  friend bool operator< <> (const VectorGain<Gain>&, const VectorGain<Gain>&);
-  friend bool operator> <> (const VectorGain<Gain>&, const VectorGain<Gain>&);
-  friend bool operator== <> (const VectorGain<Gain>&, const VectorGain<Gain>&);
-
-// TODO: fix
-//  template<class StoppingPolicy, class FMImprovementPolicy>
-//  friend class TwoWayLookaheadRefiner;
-//  template<class StoppingPolicy, class FMImprovementPolicy>
-//  friend class TwoWayNewLookaheadRefiner;
-//private:
-  std::vector<Gain> _v;
-
-  static size_t _depth;
-};
-
-template <class Gain>
-size_t VectorGain<Gain>::_depth;
-
-template <class Gain>
-std::ostream& operator<< (std::ostream& os, const VectorGain<Gain>& v) {
-  os << '{';
-  for (size_t i = 0; i < v._v.size(); i++) {
-    if (i) os << ", ";
-    os << v._v[i];
-  }
-  os << '}';
-  return os;
-}
-
-template <class Gain>
-bool operator< (const VectorGain<Gain>& a, const VectorGain<Gain>& b) {
-  return a._v < b._v;
-}
-
-template <class Gain>
-bool operator> (const VectorGain<Gain>& a, const VectorGain<Gain>& b) {
-  return a._v > b._v;
-}
-
-template <class Gain>
-bool operator== (const VectorGain<Gain>& a, const VectorGain<Gain>& b) {
-  return a._v == b._v;
-}
-
-template <class Gain>
-bool operator!= (const VectorGain<Gain>& a, const VectorGain<Gain>& b) {
-  return !(a == b);
-}
-
-template <class Gain>
-bool operator== (const VectorGain<Gain>& vec, const Gain& val) {
-  return vec == VectorGain<Gain>(vec.size(), val);
-}
-
-template <class Gain>
-bool operator!= (const VectorGain<Gain>& vec, const Gain& val) {
-  return !(vec == val);
-}
-
-template <class Gain>
-VectorGain<Gain> operator+ (const VectorGain<Gain>& a, const VectorGain<Gain>& b) {
-  VectorGain<Gain> c = a;
-  c += b;
-  return c;
-}
-
-template <class Gain>
-class VectorGainLimits {
-public:
-  static const VectorGain<Gain>& lowest() {return _min;}
-  static const VectorGain<Gain>& max() {return _max;}
-private:
-  static const VectorGain<Gain> _min;
-  static const VectorGain<Gain> _max;
-};
-
-template <class Gain>
-const VectorGain<Gain> VectorGainLimits<Gain>::_min = VectorGain<Gain>(std::vector<Gain>());
-
-template <class Gain>
-const VectorGain<Gain> VectorGainLimits<Gain>::_max(std::numeric_limits<Gain>::max());
-
 template <class StoppingPolicy = Mandatory,
           class FMImprovementPolicy = CutDecreasedOrInfeasibleImbalanceDecreased>
-class TwoWayLookaheadRefiner final : public IRefiner,
+class TwoWayNewLookaheadRefiner final : public IRefiner,
                       private FMRefinerBase<HypernodeID, VectorGain<Gain>, VectorGainLimits<Gain> >{
  private:
   static constexpr bool debug = false;
@@ -187,7 +59,7 @@ class TwoWayLookaheadRefiner final : public IRefiner,
   using Base = FMRefinerBase<HypernodeID, VectorGain<Gain>, VectorGainLimits<Gain> >;
 
  public:
-  TwoWayLookaheadRefiner(Hypergraph& hypergraph, const Context& context) :
+  TwoWayNewLookaheadRefiner(Hypergraph& hypergraph, const Context& context) :
     FMRefinerBase(hypergraph, context),
     _he_fully_active(_hg.initialNumEdges()),
     _hns_in_activation_vector(_hg.initialNumNodes()),
@@ -201,13 +73,13 @@ class TwoWayLookaheadRefiner final : public IRefiner,
     VectorGain<Gain>::_depth = _depth;
   }
 
-  ~TwoWayLookaheadRefiner() override = default;
+  ~TwoWayNewLookaheadRefiner() override = default;
 
-  TwoWayLookaheadRefiner(const TwoWayLookaheadRefiner&) = delete;
-  TwoWayLookaheadRefiner& operator= (const TwoWayLookaheadRefiner&) = delete;
+  TwoWayNewLookaheadRefiner(const TwoWayNewLookaheadRefiner&) = delete;
+  TwoWayNewLookaheadRefiner& operator= (const TwoWayNewLookaheadRefiner&) = delete;
 
-  TwoWayLookaheadRefiner(TwoWayLookaheadRefiner&&) = delete;
-  TwoWayLookaheadRefiner& operator= (TwoWayLookaheadRefiner&&) = delete;
+  TwoWayNewLookaheadRefiner(TwoWayNewLookaheadRefiner&&) = delete;
+  TwoWayNewLookaheadRefiner& operator= (TwoWayNewLookaheadRefiner&&) = delete;
 
   void activate(const HypernodeID hn,
                 const HypernodeWeightArray& max_allowed_part_weights) {
@@ -215,8 +87,6 @@ class TwoWayLookaheadRefiner final : public IRefiner,
       ASSERT(!_hg.active(hn), V(hn));
       ASSERT(!_hg.marked(hn), V(hn));
       ASSERT(!_pq.contains(hn, 1 - _hg.partID(hn)), V(hn));
-      ASSERT(_gain_cache.value(hn) == computeGain(hn), V(hn)
-             << V(_gain_cache.value(hn)) << V(computeGain(hn)));
 
       DBG << "inserting HN" << hn << "with gain "
           << computeGain(hn) << "in PQ" << 1 - _hg.partID(hn);
@@ -312,8 +182,6 @@ class TwoWayLookaheadRefiner final : public IRefiner,
       ASSERT(!_hg.marked(max_gain_node), V(max_gain_node));
       ASSERT(_hg.isBorderNode(max_gain_node), V(max_gain_node));
 
-      ASSERT(max_gain == computeGain(max_gain_node));
-      ASSERT(max_gain == _gain_cache.value(max_gain_node));
       ASSERT([&]() {
           _hg.changeNodePart(max_gain_node, from_part, to_part);
           ASSERT((current_cut - max_gain[0]) == metrics::hyperedgeCut(_hg),
@@ -377,6 +245,20 @@ class TwoWayLookaheadRefiner final : public IRefiner,
     rollback(_performed_moves.size() - 1, min_cut_index);
     _gain_cache.rollbackDelta();
 
+    for (HyperedgeID he : _dirty_hes) {
+      for (HypernodeID pin : _hg.pins(he)) {
+        VectorGain<Gain> gain = computeGain(pin);
+        _gain_cache.setValue(pin, gain);
+        if (_pq.contains(pin, 0)) {
+          _pq.updateKey(pin, 0, gain);
+        }
+        if (_pq.contains(pin, 1)) {
+          _pq.updateKey(pin, 1, gain);
+        }
+      }
+    }
+    _dirty_hes.clear();
+
     ASSERT(best_metrics.cut == metrics::hyperedgeCut(_hg));
     ASSERT(best_metrics.cut <= initial_cut, V(initial_cut) << V(best_metrics.cut));
     ASSERT(best_metrics.imbalance == metrics::imbalance(_hg, _context),
@@ -436,6 +318,7 @@ class TwoWayLookaheadRefiner final : public IRefiner,
           // he is free.
           fullUpdate(from_part, to_part, he);
           _locked_hes.set(he, to_part);
+          _dirty_hes.insert(he);
           DBG << "HE" << he << "changed state: free -> loose";
         } else {
           // he is loose and becomes locked after the move
@@ -449,12 +332,6 @@ class TwoWayLookaheadRefiner final : public IRefiner,
         deltaUpdate(from_part, to_part, he);
       }
     }
-
-    VectorGain<Gain> new_gain = computeGain(moved_hn);
-    _gain_cache.setValue(moved_hn, new_gain);
-    rb_delta += old_gain;
-    rb_delta -= new_gain;
-    _gain_cache.setDelta(moved_hn, rb_delta);
 
     for (const HypernodeID& hn : _hns_to_activate) {
       ASSERT(!_hg.active(hn), V(hn));
@@ -473,6 +350,7 @@ class TwoWayLookaheadRefiner final : public IRefiner,
     // kkt_power.
     removeInternalizedHns();
 
+    /*
     ASSERT([&]() {
         for (const HyperedgeID& he : _hg.incidentEdges(moved_hn)) {
           for (const HypernodeID& pin : _hg.pins(he)) {
@@ -501,6 +379,7 @@ class TwoWayLookaheadRefiner final : public IRefiner,
         }
         return true;
       } (), "UpdateNeighbors failed!");
+    */
 
     ASSERT((!_pq.empty(0) && _hg.partWeight(0) < max_allowed_part_weights[0] ?
             _pq.isEnabled(0) : !_pq.isEnabled(0)), V(0));
@@ -553,17 +432,21 @@ class TwoWayLookaheadRefiner final : public IRefiner,
   // This is used for the state transitions: free -> loose and loose -> locked
   void fullUpdate(const PartitionID from_part,
                   const PartitionID to_part, const HyperedgeID he) {
-    const HypernodeID here = _hg.pinCountInPart(he, from_part);
-    const HypernodeID there = _hg.pinCountInPart(he, to_part);
+    HypernodeID here = _hg.pinCountInPart(he, from_part);
+    HypernodeID there = _hg.pinCountInPart(he, to_part);
     const HyperedgeWeight he_weight = _hg.edgeWeight(he);
 
-    VectorGain<Gain> hereDelta(_depth, 0);
-    addHeContrib(hereDelta, here, there, he_weight);
-    addHeContrib(hereDelta, here+1, there-1, he_weight, -1);
+    if (_locked_hes.get(he) != HEState::free) {
+      here = 1000;
+    }
 
-    VectorGain<Gain> thereDelta(_depth, 0);
-    addHeContrib(thereDelta, there, here, he_weight);
+    VectorGain<Gain> hereDelta(_depth, 0), thereDelta(_depth, 0);
+    addHeContrib(hereDelta, here+1, there-1, he_weight, -1);
     addHeContrib(thereDelta, there-1, here+1, he_weight, -1);
+
+    there = 1000;
+    addHeContrib(hereDelta, here, there, he_weight);
+    addHeContrib(thereDelta, there, here, he_weight);
 
     HypernodeID num_active_pins = 1;
 
@@ -588,17 +471,20 @@ class TwoWayLookaheadRefiner final : public IRefiner,
   template <bool update_local_search_pq = true>
   void deltaUpdate(const PartitionID from_part,
                    const PartitionID to_part, const HyperedgeID he) {
-    const HypernodeID here = _hg.pinCountInPart(he, from_part);
-    const HypernodeID there = _hg.pinCountInPart(he, to_part);
+    HypernodeID here = _hg.pinCountInPart(he, from_part);
+    HypernodeID there = 1000;
     const HyperedgeWeight he_weight = _hg.edgeWeight(he);
 
-    VectorGain<Gain> hereDelta(_depth, 0);
-    addHeContrib(hereDelta, here, there, he_weight);
+    if (_locked_hes.get(he) == HEState::locked) {
+      here = 1000;
+    }
+    VectorGain<Gain> hereDelta(_depth, 0), thereDelta(_depth, 0);
+    // clear previous state
     addHeContrib(hereDelta, here+1, there-1, he_weight, -1);
-
-    VectorGain<Gain> thereDelta(_depth, 0);
-    addHeContrib(thereDelta, there, here, he_weight);
     addHeContrib(thereDelta, there-1, here+1, he_weight, -1);
+
+    addHeContrib(hereDelta, here, there, he_weight);
+    addHeContrib(thereDelta, there, here, he_weight);
 
     if (hereDelta == 0 && thereDelta == 0) {
       return;
@@ -682,6 +568,7 @@ class TwoWayLookaheadRefiner final : public IRefiner,
   std::vector<HypernodeID> _non_border_hns_to_remove;
   TwoWayFMGainCache<VectorGain<Gain>, VectorGainLimits<Gain> > _gain_cache;
   ds::FastResetArray<PartitionID> _locked_hes;
+  std::set<HyperedgeID> _dirty_hes;
   StoppingPolicy _stopping_policy;
   size_t _depth;
 };
