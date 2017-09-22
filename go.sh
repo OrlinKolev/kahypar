@@ -26,7 +26,7 @@ action='run'
 
 # this is used on 'run' and 'commit'
 # set to refiner currently in development
-default_refiner='twoway_new_lookahead'
+default_refiner='twoway_netstatus'
 
 # this is used on 'eval' and 'commit'
 baseline_refiners='twoway_lookahead twoway_th_th_soft_gain twoway_netstatus twoway_soft_gain twoway_fm'
@@ -121,7 +121,7 @@ eval_graphs=$(ls "$KAHYPAR_TEST_DATA_DIR" | grep -v KaHyPar)
 
 args=( "-s" "true" "--mode" "recursive" "--objective" "km1" "--epsilon" "0.03" \
     "--r-thresholds" "0.6;0.7;0.8;0.9" \
-    "--r-gain-factors" "0.15;0.15;0.15;0.15")
+    "--r-gain-factors" "0.15;0.15;0.15;0.15" "--r-netstatus-variant" "110")
 
 if [ "$action" == 'eval' ]
 then

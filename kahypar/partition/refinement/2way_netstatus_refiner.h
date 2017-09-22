@@ -65,7 +65,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
     _gain_cache(_hg.initialNumNodes()),
     _locked_hes(_hg.initialNumEdges(), HEState::free),
     _temp_gains(_hg.initialNumNodes(), 0),
-    _locked_pins(_hg.initialNumEdges(), 0),
+    _loose_net_gains(_hg.initialNumEdges(), 0),
     _stopping_policy(),
     _max_he_size(std::min(_context.partition.hyperedge_size_threshold,
                           _context.local_search.fm.he_size_at_percentile)) {
@@ -73,7 +73,6 @@ class TwoWayNetstatusRefiner final : public IRefiner,
     _non_border_hns_to_remove.reserve(_hg.initialNumNodes());
 
     _locked_part_cf = _context.local_search.fm.netstatus_variant >= 100 ? 0 : -1;
-    _use_node_degree = _context.local_search.fm.netstatus_variant % 100 >= 10;
     _formula = _context.local_search.fm.netstatus_variant % 10;
   }
 
@@ -100,34 +99,29 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   }
 
   FineGain getLooseHEDelta(HyperedgeID he) {
-    // TODO(orlin): The whole thing could be speed up by using integer-based
-    // FineGains.  Cong. et al. also actually use floor in their
-    // formula. Furthermore the fine gain serves as a hint which move to choose next,
-    // as is does not correspond to some kind of 'real' gain in the objective.
-    FineGain size = _hg.edgeSize(he);
-    FineGain locked = _locked_pins.get(he);
-    FineGain free = size - locked;
-
-    FineGain l_deg = 0, f_deg = 0;
-    if (_use_node_degree) {
-      // TODO(orlin): Cache this using a vector of size 2 * |E|
-      // to avoid tedious recomputation.
-      for (const HypernodeID& pin : _hg.pins(he)) {
-        if (_hg.marked(pin)) {
-          l_deg += getWeightedNodeDegree(pin);
-        } else {
-          f_deg += getWeightedNodeDegree(pin);
-        }
+    PartitionID anchor = 666;
+    FineGain locked = 0, free = 0;
+    for (const HypernodeID& pin : _hg.pins(he)) {
+      if (_hg.marked(pin)) {
+        locked += getWeightedNodeDegree(pin);
+        ASSERT(anchor == 666 || anchor == _hg.partID(pin));
+        anchor = _hg.partID(pin);
       }
-
-      locked = l_deg;
-      free = f_deg;
     }
 
+    ASSERT(anchor != 666);
+    for (const HypernodeID& pin : _hg.pins(he)) {
+      if (_hg.partID(pin) != anchor) {
+        free += getWeightedNodeDegree(pin);
+      }
+    }
+
+    if (_formula != 3 && free == 0) {
+      return std::numeric_limits<FineGain>::max();
+    }
+
+    FineGain size = _hg.edgeSize(he);
     switch (_formula) {
-    // TODO(orlin): If it turns out that we could use multiple variants of this,
-    // then this should be implemented as a template policy like the stopping rule
-    // or improvement policy.
       case 0:
         return (_max_he_size / size) * (locked / free);
       case 1:
@@ -198,7 +192,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
     reset();
     _he_fully_active.reset();
     _locked_hes.resetUsedEntries();
-    _locked_pins.resetUsedEntries();
+    _loose_net_gains.resetUsedEntries();
     _temp_gains.resetUsedEntries();
 
     _gain_cache.setValue(refinement_nodes[0], computeGain(refinement_nodes[0]));
@@ -489,8 +483,8 @@ class TwoWayNetstatusRefiner final : public IRefiner,
     bool locked = _locked_hes.get(he) != HEState::free;
 
     if (_locked_hes.get(he) == HEState::free) {
-      _locked_pins.set(he, 1);
       const FineGain state_gain = getLooseHEDelta(he);
+      _loose_net_gains.set(he, state_gain);
 
       for (const HypernodeID& pin : _hg.pins(he)) {
         const PartitionID target_part = 1 - _hg.partID(pin);
@@ -502,7 +496,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
         }
       }
     } else {
-      const FineGain state_gain = getLooseHEDelta(he);
+      const FineGain state_gain = _loose_net_gains.get(he);
 
       for (const HypernodeID& pin : _hg.pins(he)) {
         const PartitionID target_part = 1 - _hg.partID(pin);
@@ -601,9 +595,10 @@ class TwoWayNetstatusRefiner final : public IRefiner,
                    const PartitionID to_part, const HyperedgeID he) {
 
     if (update_local_search_pq) {
-      FineGain state_gain = -getLooseHEDelta(he);
-      _locked_pins.set(he, _locked_pins.get(he) + 1); // this changes the looseHEDelta
-      state_gain += getLooseHEDelta(he);
+      FineGain state_gain = -_loose_net_gains.get(he);
+      FineGain new_gain = getLooseHEDelta(he);
+      state_gain += new_gain;
+      _loose_net_gains.set(he, state_gain);
 
       for (const HypernodeID& pin : _hg.pins(he)) {
         const PartitionID target_part = 1 - _hg.partID(pin);
@@ -760,7 +755,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
   ds::FastResetArray<PartitionID> _locked_hes;
   StoppingPolicy _stopping_policy;
   ds::FastResetArray<FineGain> _temp_gains;
-  ds::FastResetArray<unsigned int> _locked_pins;
+  ds::FastResetArray<FineGain> _loose_net_gains;
   stats _stats;
   unsigned int _max_he_size;
   int _locked_part_cf;
