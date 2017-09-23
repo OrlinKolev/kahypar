@@ -598,7 +598,7 @@ class TwoWayNetstatusRefiner final : public IRefiner,
       FineGain state_gain = -_loose_net_gains.get(he);
       FineGain new_gain = getLooseHEDelta(he);
       state_gain += new_gain;
-      _loose_net_gains.set(he, state_gain);
+      _loose_net_gains.set(he, new_gain);
 
       for (const HypernodeID& pin : _hg.pins(he)) {
         const PartitionID target_part = 1 - _hg.partID(pin);
