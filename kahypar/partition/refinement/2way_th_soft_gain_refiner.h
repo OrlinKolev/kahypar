@@ -47,10 +47,6 @@
 
 namespace kahypar {
 
-// TODO(orlin): Does this really correspond to thethe threshold softgain FM
-// version as described by Mann and Papp in their paper "Formula partitioning revisited" and
-// implemented in the code we got from them?
-// How does a particular instantiation of thresholds and corresponding soft gains look like?
 template <class StoppingPolicy = Mandatory,
           class FMImprovementPolicy = CutDecreasedOrInfeasibleImbalanceDecreased>
 class TwoWayThSoftGainRefiner final : public IRefiner,
@@ -143,12 +139,18 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
     _locked_hes.resetUsedEntries();
 
     Randomize::instance().shuffleVector(refinement_nodes, refinement_nodes.size());
-    // TODO(orlin): This seems to be a performance bug, since you potentially recompute the gain
-    // of a hypernode multiple times (in case it is a pin of several nets).
     for (const HypernodeID& hn : refinement_nodes) {
       for (const HyperedgeID& he : _hg.incidentEdges(hn)) {
         for (const HypernodeID& pin : _hg.pins(he)) {
-          _gain_cache.setValue(pin, computeGain(pin));
+          _gain_cache.setNotCached(pin);
+        }
+      }
+
+      for (const HyperedgeID& he : _hg.incidentEdges(hn)) {
+        for (const HypernodeID& pin : _hg.pins(he)) {
+          if (!_gain_cache.isCached(pin)) {
+            _gain_cache.setValue(pin, computeGain(pin));
+          }
         }
       }
 
@@ -184,9 +186,7 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
       PartitionID to_part = Hypergraph::kInvalidPartition;
 
       _pq.deleteMax(max_gain_node, max_gain, to_part);
-      // TODO(orlin): This is a potential performance killer. If we decide to
-      // go with threshold soft-gains then we might have to explicitly cache the normal
-      // gains or find an easy way to 'recompute' the original gain from the soft gain.
+      // TODO(orlin): keep track of cuts separately
       Gain cut_delta = computeCut(max_gain_node);
 
       PartitionID from_part = _hg.partID(max_gain_node);
@@ -332,10 +332,7 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
       }
     }
 
-    // TODO: try to get rid of this
-    // TODO(orlin): This is a potential performance killer. If we decide to
-    // go with threshold soft-gains then we might have to explicitly cache the normal
-    // gains or find an easy way to 'recompute' the original gain from the soft gain.
+    // TODO(orlin): try to get rid of this
     FineGain new_gain = computeGain(moved_hn);
     _gain_cache.setValue(moved_hn, new_gain);
     _gain_cache.setDelta(moved_hn, rb_delta + old_gain - new_gain);
@@ -431,34 +428,26 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
                   const PartitionID to_part, const HyperedgeID he) {
 
     HypernodeID num_active_pins = 1;  // because moved_hn was active
+    HypernodeID sz = _hg.edgeSize(he);
+    HypernodeID to_pins = _hg.pinCountInPart(he, to_part);
+    HypernodeID from_pins = _hg.pinCountInPart(he, from_part);
+
+    ASSERT(to_pins > 0);
+    ASSERT(from_pins < sz);
+
+    // if we're on the 'from' side, the gain depends on the # of pins on the 'to' side & vice-versa
+    FineGain from_before = getThresholdFactor(to_pins - 1, sz);
+    FineGain from_after = to_pins == sz ? 0 : getThresholdFactor(to_pins, sz);
+    FineGain to_before = from_pins + 1 == sz ? 0 : getThresholdFactor(from_pins + 1, sz);
+    FineGain to_after = getThresholdFactor(from_pins, sz);
+
+    FineGain from_delta = (from_after - from_before) * _hg.edgeWeight(he);
+    FineGain to_delta = (to_after - to_before) * _hg.edgeWeight(he);
+
     for (const HypernodeID& pin : _hg.pins(he)) {
-      FineGain before, after;
-      if (_hg.partID(pin) == from_part) {
-        // TODO(orlin): Potential performance bug: Both methods only need
-        // to be called _once_ outside of the forall pins()-loop. Then you
-        // can reuse the values throughout the iterations.
-        HypernodeID t = _hg.pinCountInPart(he, to_part);
-        HypernodeID sz = _hg.edgeSize(he);
+      FineGain& before = _hg.partID(pin) == from_part ? from_before : to_before;
+      FineGain& after = _hg.partID(pin) == from_part ? from_after : to_after;
 
-        ASSERT(t > 0);
-
-        before = getThresholdFactor(t-1, sz);
-        after = getThresholdFactor(t, sz);
-      } else {
-        HypernodeID t = _hg.pinCountInPart(he, from_part);
-        HypernodeID sz = _hg.edgeSize(he);
-
-        if (t+1 == sz) {
-          // we are looking at the moved hn, its gain is updated in updateNeighbours
-          continue;
-        }
-        before = getThresholdFactor(t+1, sz);
-        after = getThresholdFactor(t, sz);
-      }
-
-      // TODO(orlin): If I understand this correctly, than our soft gains are way more
-      // fine grained than the soft gains of Mann and Papp, since they only apply soft-gains
-      // for move that actually cross a boundary threshold (and not to all moves).
       performNonZeroFullUpdate(pin, (after - before) * _hg.edgeWeight(he), num_active_pins);
     }
 
@@ -478,32 +467,24 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
   void deltaUpdate(const PartitionID from_part,
                    const PartitionID to_part, const HyperedgeID he) {
 
+    HypernodeID sz = _hg.edgeSize(he);
+    HypernodeID to_pins = _hg.pinCountInPart(he, to_part);
+    HypernodeID from_pins = _hg.pinCountInPart(he, from_part);
 
-    // TODO(orlin): Performance bottleneck: The whole
-    // computation of delta can be done once for from_part
-    // and to_part and then re-applied
-    // for each of the pins. This saves a lot of computation.
+    ASSERT(to_pins > 0);
+    ASSERT(from_pins + 1 < sz);
+
+    // if we're on the 'from' side, the gain depends on the # of pins on the 'to' side & vice-versa
+    FineGain from_before = getThresholdFactor(to_pins - 1, sz);
+    FineGain from_after = to_pins == sz ? 0 : getThresholdFactor(to_pins, sz);
+    FineGain to_before = getThresholdFactor(from_pins + 1, sz);
+    FineGain to_after = getThresholdFactor(from_pins, sz);
+
+    FineGain from_delta = (from_after - from_before) * _hg.edgeWeight(he);
+    FineGain to_delta = (to_after - to_before) * _hg.edgeWeight(he);
+
     for (const HypernodeID& pin : _hg.pins(he)) {
-      FineGain before, after;
-      if (_hg.partID(pin) == from_part) {
-        HypernodeID t = _hg.pinCountInPart(he, to_part);
-        HypernodeID sz = _hg.edgeSize(he);
-
-        ASSERT(t > 0);
-
-        before = getThresholdFactor(t-1, sz);
-        after = getThresholdFactor(t, sz);
-      } else {
-        HypernodeID t = _hg.pinCountInPart(he, from_part);
-        HypernodeID sz = _hg.edgeSize(he);
-
-        ASSERT(t+1 < sz);
-
-        before = getThresholdFactor(t+1, sz);
-        after = getThresholdFactor(t, sz);
-      }
-
-      FineGain delta = (after - before) * _hg.edgeWeight(he);
+      FineGain& delta = _hg.partID(pin) == from_part ? from_delta : to_delta;
 
       if (!_hg.marked(pin)) {
         updatePin(pin, delta);
@@ -571,9 +552,6 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
 
   FineGain getThresholdFactor(HypernodeID t, HypernodeID sz) const {
     FineGain part = (FineGain)t / (sz-1);
-    // TODO(orlin): How large does the _thresholds vector become?
-    // If it's not too big, then a linear scan might be even faster than
-    // the logarithmic std::lower_bound.
     // TODO(orlin): For the final version, we might be able to actually hard-code the thresholds
     // into an std::array.
     auto it = std::lower_bound(_thresholds.begin(), _thresholds.end(), part);
