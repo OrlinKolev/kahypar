@@ -168,9 +168,7 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
           _gain_cache.setNotCached(pin);
         }
       }
-    }
 
-    for (const HypernodeID& hn : refinement_nodes) {
       for (const HyperedgeID& he : _hg.incidentEdges(hn)) {
         for (const HypernodeID& pin : _hg.pins(he)) {
           if (!_gain_cache.isCached(pin)) {
