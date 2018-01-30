@@ -66,7 +66,7 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
     _gain_cache(_hg.initialNumNodes()),
     _locked_hes(_hg.initialNumEdges(), HEState::free),
     _he_gain_contrib{TwoWayFMGainCache<double>(_hg.initialNumEdges()),
-                     TwoWayFMGainCache<double>(_hg.initialNumEdges()),},
+                     TwoWayFMGainCache<double>(_hg.initialNumEdges())},
     _stopping_policy() {
     ASSERT(context.partition.k == 2);
     _non_border_hns_to_remove.reserve(_hg.initialNumNodes());
@@ -119,14 +119,18 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
       _is_initialized = true;
     }
 
-    _he_gain_contrib[0].clear();
-    _he_gain_contrib[1].clear();
+    for (int part = 0; part < 2; part++) {
+      for (HyperedgeID he = 0; he < _hg.initialNumEdges(); he++) {
+        _he_gain_contrib[part].setValue(he, 0);
+      }
+    }
+
     for (const HyperedgeID& he : _hg.edges()) {
       for (int part = 0; part < 2; part++) {
         _he_gain_contrib[part].setValue(he,
           _hg.pinCountInPart(he, 1-part) == _hg.edgeSize(he)
           ? 0
-          : getThresholdFactor(_hg.pinCountInPart(he, 1-part), _hg.edgeSize(he))
+          : getThresholdFactor(_hg.pinCountInPart(he, 1-part), _hg.edgeSize(he)) * _hg.edgeWeight(he)
         );
       }
     }
@@ -156,26 +160,33 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
     Randomize::instance().shuffleVector(refinement_nodes, refinement_nodes.size());
     for (const HypernodeID& hn : refinement_nodes) {
       for (const HyperedgeID& he : _hg.incidentEdges(hn)) {
+        bool dirty = false;
+        double thf_delta[2] = {0, 0};
         for (int part = 0; part < 2; part++) {
-          _he_gain_contrib[part].setValue(he,
+          double new_thf =
             _hg.pinCountInPart(he, 1-part) == _hg.edgeSize(he)
             ? 0
-            : getThresholdFactor(_hg.pinCountInPart(he, 1-part), _hg.edgeSize(he))
-          );
+            : getThresholdFactor(_hg.pinCountInPart(he, 1-part), _hg.edgeSize(he))*_hg.edgeWeight(he);
+
+          double old_thf = _he_gain_contrib[part].value(he);
+
+          if (!ALMOST_EQUALS(old_thf, new_thf)) {
+            dirty = true;
+            thf_delta[part] = new_thf - old_thf;
+            _he_gain_contrib[part].setValue(he, new_thf);
+          }
         }
 
         for (const HypernodeID& pin : _hg.pins(he)) {
-          _gain_cache.setNotCached(pin);
-        }
-      }
-
-      for (const HyperedgeID& he : _hg.incidentEdges(hn)) {
-        for (const HypernodeID& pin : _hg.pins(he)) {
-          if (!_gain_cache.isCached(pin)) {
-            _gain_cache.setValue(pin, computeGain(pin));
+          if (_gain_cache.isCached(pin) && dirty) {
+            _gain_cache.updateValue(pin, thf_delta[_hg.partID(pin)]);
           }
         }
       }
+    }
+
+    for (const HypernodeID& hn : refinement_nodes) {
+      _gain_cache.setValue(hn, computeGain(hn));
 
       activate(hn, max_allowed_part_weights);
 
@@ -464,17 +475,21 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
 
     // if we're on the 'from' side, the gain depends on the # of pins on the 'to' side & vice-versa
     FineGain from_before = _he_gain_contrib[from_part].value(he);
-    FineGain from_after = to_pins == sz ? 0 : getThresholdFactor(to_pins, sz);
+    FineGain from_after = to_pins == sz ? 0 : getThresholdFactor(to_pins, sz) * _hg.edgeWeight(he);
     FineGain to_before = _he_gain_contrib[to_part].value(he);
-    FineGain to_after = getThresholdFactor(from_pins, sz);
+    FineGain to_after = getThresholdFactor(from_pins, sz) * _hg.edgeWeight(he);
 
-    ASSERT(ALMOST_EQUALS(_he_gain_contrib[from_part].value(he), getThresholdFactor(to_pins-1, sz)),
-        V(he) << V(_he_gain_contrib[from_part].value(he)) << V(getThresholdFactor(to_pins-1, sz))
+    ASSERT(ALMOST_EQUALS(_he_gain_contrib[from_part].value(he),
+                         getThresholdFactor(to_pins-1, sz) * _hg.edgeWeight(he)),
+        V(he) << V(_he_gain_contrib[from_part].value(he))
+        << V(getThresholdFactor(to_pins-1, sz) * _hg.edgeWeight(he))
         << V(to_pins) << V(sz));
 
     ASSERT(from_pins+1 == sz ||
-        ALMOST_EQUALS(_he_gain_contrib[to_part].value(he), getThresholdFactor(from_pins+1, sz)),
-        V(_he_gain_contrib[to_part].value(he)) << V(getThresholdFactor(from_pins+1, sz)));
+        ALMOST_EQUALS(_he_gain_contrib[to_part].value(he),
+                      getThresholdFactor(from_pins+1, sz) * _hg.edgeWeight(he)),
+        V(_he_gain_contrib[to_part].value(he))
+        << V(getThresholdFactor(from_pins+1, sz) * _hg.edgeWeight(he)));
 
     ASSERT(from_pins+1 != sz || _he_gain_contrib[to_part].value(he) == 0,
         V(_he_gain_contrib[to_part].value(he)));
@@ -483,7 +498,7 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
       FineGain& before = _hg.partID(pin) == from_part ? from_before : to_before;
       FineGain& after = _hg.partID(pin) == from_part ? from_after : to_after;
 
-      performNonZeroFullUpdate(pin, (after - before) * _hg.edgeWeight(he), num_active_pins);
+      performNonZeroFullUpdate(pin, after - before, num_active_pins);
     }
 
     _he_fully_active.set(he, (_hg.edgeSize(he) == num_active_pins));
@@ -514,17 +529,21 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
 
     // if we're on the 'from' side, the gain depends on the # of pins on the 'to' side & vice-versa
     FineGain from_before = _he_gain_contrib[from_part].value(he);
-    FineGain from_after = to_pins == sz ? 0 : getThresholdFactor(to_pins, sz);
+    FineGain from_after = to_pins == sz ? 0 : getThresholdFactor(to_pins, sz) * _hg.edgeWeight(he);
     FineGain to_before = _he_gain_contrib[to_part].value(he);
-    FineGain to_after = getThresholdFactor(from_pins, sz);
+    FineGain to_after = getThresholdFactor(from_pins, sz) * _hg.edgeWeight(he);
 
-    ASSERT(ALMOST_EQUALS(_he_gain_contrib[from_part].value(he), getThresholdFactor(to_pins-1, sz)),
-        V(he) << V(_he_gain_contrib[from_part].value(he)) << V(getThresholdFactor(to_pins-1, sz))
+    ASSERT(ALMOST_EQUALS(_he_gain_contrib[from_part].value(he),
+                         getThresholdFactor(to_pins-1, sz) * _hg.edgeWeight(he)),
+        V(he) << V(_he_gain_contrib[from_part].value(he))
+        << V(getThresholdFactor(to_pins-1, sz) * _hg.edgeWeight(he))
         << V(to_pins) << V(sz));
 
     ASSERT(from_pins+1 == sz ||
-        ALMOST_EQUALS(_he_gain_contrib[to_part].value(he), getThresholdFactor(from_pins+1, sz)),
-        V(_he_gain_contrib[to_part].value(he)) << V(getThresholdFactor(from_pins+1, sz)));
+        ALMOST_EQUALS(_he_gain_contrib[to_part].value(he),
+                      getThresholdFactor(from_pins+1, sz) * _hg.edgeWeight(he)),
+        V(_he_gain_contrib[to_part].value(he))
+        << V(getThresholdFactor(from_pins+1, sz) * _hg.edgeWeight(he)));
 
     ASSERT(from_pins+1 != sz || _he_gain_contrib[to_part].value(he) == 0,
         V(_he_gain_contrib[to_part].value(he)));
@@ -533,8 +552,7 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
     FineGain to_delta = to_after - to_before;
 
     for (const HypernodeID& pin : _hg.pins(he)) {
-      const FineGain& delta =
-        (_hg.partID(pin) == from_part ? from_delta : to_delta) * _hg.edgeWeight(he);
+      const FineGain& delta = _hg.partID(pin) == from_part ? from_delta : to_delta;
 
       if (!_hg.marked(pin)) {
         updatePin(pin, delta);
