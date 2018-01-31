@@ -119,6 +119,12 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
       _is_initialized = true;
     }
 
+    for (size_t sz = 0; sz < THF_CACHE_SIZE; sz++) {
+      for (size_t t = 0; t < sz; t++) {
+        _thf_cache[t][sz] = computeThresholdFactor(t, sz);
+      }
+    }
+
     for (int part = 0; part < 2; part++) {
       for (HyperedgeID he = 0; he < _hg.initialNumEdges(); he++) {
         _he_gain_contrib[part].setValue(he, 0);
@@ -621,10 +627,8 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
     return gain;
   }
 
-  FineGain getThresholdFactor(HypernodeID t, HypernodeID sz) const {
+  FineGain computeThresholdFactor(HypernodeID t, HypernodeID sz) const {
     FineGain part = (FineGain)t / (sz-1);
-    // TODO(orlin): For the final version, we might be able to actually hard-code the thresholds
-    // into an std::array.
     auto it = std::lower_bound(_thresholds.begin(), _thresholds.end(), part);
     int index = it - _thresholds.begin();
 
@@ -632,6 +636,14 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
     ASSERT(index < _th_gain_factors.size());
 
     return _th_gain_factors[index];
+  }
+
+  FineGain getThresholdFactor(HypernodeID t, HypernodeID sz) const {
+    if (t < THF_CACHE_SIZE && sz < THF_CACHE_SIZE) {
+      return _thf_cache[t][sz];
+    } else {
+      return computeThresholdFactor(t, sz);
+    }
   }
 
   std::vector<double> parseConfigString(const std::string& input) const {
@@ -670,6 +682,8 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
   using Base::_performed_moves;
   using Base::_hns_to_activate;
 
+  static const size_t THF_CACHE_SIZE = 101;
+
   ds::FastResetFlagArray<> _he_fully_active;
   ds::FastResetFlagArray<> _hns_in_activation_vector;  // faster than using a SparseSet in this case
   std::vector<HypernodeID> _non_border_hns_to_remove;
@@ -679,5 +693,6 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
   std::vector<double> _thresholds;
   std::vector<FineGain> _th_gain_factors;
   TwoWayFMGainCache<double> _he_gain_contrib[2];
+  double _thf_cache[THF_CACHE_SIZE][THF_CACHE_SIZE];
 };
 }                                   // namespace kahypar
