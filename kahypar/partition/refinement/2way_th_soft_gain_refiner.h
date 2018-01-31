@@ -65,8 +65,8 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
     _non_border_hns_to_remove(),
     _gain_cache(_hg.initialNumNodes()),
     _locked_hes(_hg.initialNumEdges(), HEState::free),
-    _he_gain_contrib{TwoWayFMGainCache<double>(_hg.initialNumEdges()),
-                     TwoWayFMGainCache<double>(_hg.initialNumEdges())},
+    _he_gain_contrib{TwoWayFMGainCache<FineGain>(_hg.initialNumEdges()),
+                     TwoWayFMGainCache<FineGain>(_hg.initialNumEdges())},
     _stopping_policy() {
     ASSERT(context.partition.k == 2);
     _non_border_hns_to_remove.reserve(_hg.initialNumNodes());
@@ -167,14 +167,14 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
     for (const HypernodeID& hn : refinement_nodes) {
       for (const HyperedgeID& he : _hg.incidentEdges(hn)) {
         bool dirty = false;
-        double thf_delta[2] = {0, 0};
+        FineGain thf_delta[2] = {0, 0};
         for (int part = 0; part < 2; part++) {
-          double new_thf =
+          FineGain new_thf =
             _hg.pinCountInPart(he, 1-part) == _hg.edgeSize(he)
             ? 0
             : getThresholdFactor(_hg.pinCountInPart(he, 1-part), _hg.edgeSize(he))*_hg.edgeWeight(he);
 
-          double old_thf = _he_gain_contrib[part].value(he);
+          FineGain old_thf = _he_gain_contrib[part].value(he);
 
           if (!ALMOST_EQUALS(old_thf, new_thf)) {
             dirty = true;
@@ -226,7 +226,6 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
       PartitionID to_part = Hypergraph::kInvalidPartition;
 
       _pq.deleteMax(max_gain_node, max_gain, to_part);
-      // TODO(orlin): keep track of cuts separately
       Gain cut_delta = computeCut(max_gain_node);
 
       PartitionID from_part = _hg.partID(max_gain_node);
@@ -376,7 +375,6 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
       }
     }
 
-    // TODO(orlin): try to get rid of this
     FineGain new_gain = computeGain(moved_hn);
     _gain_cache.setValue(moved_hn, new_gain);
     _gain_cache.setDelta(moved_hn, rb_delta + old_gain - new_gain);
@@ -692,7 +690,7 @@ class TwoWayThSoftGainRefiner final : public IRefiner,
   StoppingPolicy _stopping_policy;
   std::vector<double> _thresholds;
   std::vector<FineGain> _th_gain_factors;
-  TwoWayFMGainCache<double> _he_gain_contrib[2];
+  TwoWayFMGainCache<FineGain> _he_gain_contrib[2];
   double _thf_cache[THF_CACHE_SIZE][THF_CACHE_SIZE];
 };
 }                                   // namespace kahypar
