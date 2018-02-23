@@ -437,10 +437,10 @@ void processCommandLineInput(Context& context, int argc, char* argv[]) {
     "(default: 0.99)")
     ("r-thresholds",
     po::value<std::string>(&context.local_search.fm.thresholds)->value_name("<string>"),
-    "(default: \"0.1;0.5;0.7;0.9;1.1\")")
+    "(default: \"0.0001;0.9;0.95;0.9999;1.1\")")
     ("r-gain-factors",
     po::value<std::string>(&context.local_search.fm.gain_factors)->value_name("<string>"),
-    "(default: \"-1;0;0.25;0.5;1\")")
+    "(default: \"-1;0;0.4;0.7;1\")")
     ("r-lookahead-depth",
     po::value<int>(&context.local_search.fm.lookahead_depth)->value_name("<int>"),
     "(default: 4)")

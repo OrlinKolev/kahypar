@@ -180,8 +180,8 @@ struct LocalSearchParameters {
     int netstatus_variant = 0;
     double he_size_percentile = 0.99;
     mutable HyperedgeID he_size_at_percentile;
-    std::string thresholds = "0.1;0.5;0.7;0.9;1.1";
-    std::string gain_factors = "-1;0;0.25;0.5;1";
+    std::string thresholds = "0.0001;0.9;0.95;0.9999;1.1";
+    std::string gain_factors = "-1;0;0.4;0.7;1";
     int lookahead_depth = 4;
   };
 
